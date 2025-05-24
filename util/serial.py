@@ -63,7 +63,7 @@ class CNC:
         return self.writeln("$H")
     
 
-    def send_g1_xy_commands(self, xy_tuples: list) -> bool:
+    def send_g1_xy_commands(self, xy_tuples: list, feed:int) -> bool:
         """
         Sends multiple G1 XY commands and waits for 'ok' response after each one.
         
@@ -77,7 +77,7 @@ class CNC:
 
         for x, y in xy_tuples:
             # Format G1 command with the XY coordinates
-            command = f"G1 F2000 X{x} Y{y} Z{x*2} A{y*2}\n"
+            command = f"G1 F{feed} X{x} Y{y} Z{x} A{y}\n"
             
             # Send the command
             self.serial.write(command.encode("ascii"))

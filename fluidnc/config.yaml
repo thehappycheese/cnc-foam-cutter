@@ -28,7 +28,7 @@ axes:
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
-      pulloff_mm: 2.5
+      pulloff_mm: 3.5
       tmc_5160:
         step_pin: gpio.12
         direction_pin: gpio.14
@@ -67,7 +67,7 @@ axes:
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
-      pulloff_mm: 2.5
+      pulloff_mm: 3.5
       tmc_5160:
         step_pin: gpio.27
         direction_pin: gpio.26
@@ -106,7 +106,7 @@ axes:
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
-      pulloff_mm: 2.5
+      pulloff_mm: 3.5
       tmc_5160:
         step_pin: gpio.15
         direction_pin: gpio.2
@@ -145,7 +145,7 @@ axes:
       limit_pos_pin: NO_PIN
       limit_all_pin: NO_PIN
       hard_limits: false
-      pulloff_mm: 2.5
+      pulloff_mm: 3.5
       tmc_5160:
         step_pin: gpio.33
         direction_pin: gpio.32
