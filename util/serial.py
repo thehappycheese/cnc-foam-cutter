@@ -30,10 +30,11 @@ class CNC:
     def writeln(self, message:str) -> str:
         return self.write_read_all(message+"\n")
 
-    def alarm_clear(self) -> bool:
-        response = self.writeln("\x18")
-        response_ok = response == "ok\r\n"
-        return response_ok
+    def alarm_clear(self):
+        return self.writeln("$X")
+    
+    def alarm_soft_reset(self):
+        return self.writeln("\x18")
     
     def status(self)->str:
         return self.writeln("?")[:-6]
@@ -62,6 +63,67 @@ class CNC:
     def home(self):
         return self.writeln("$H")
     
+    def set_position(self, x:float, y:float, z:float, a:float):
+        """set the postion without moving the machine."""
+        return self.writeln(f"G92 X{x} Y{y} Z{z} A{a}")
+    
+    def travel(self, x:float, y:float, z:float, a:float):
+        """G0"""
+        return self.writeln(f"G0 X{x} Y{y} Z{z} A{a}")
+    
+    def feed(self, rate:float, x:float,y:float,z:float,a:float):
+        return self.writeln(f"G1 F{rate} X{x} Y{y} Z{z} A{a}")
+    
+    def metric(self):
+        return self.writeln("G21")
+
+    def send_g1_commands(self, command_list: list) -> bool:
+        """
+        Sends multiple G1 commands and waits for 'ok' response after each one.
+        
+        Args:
+            command_list: List of 5-element lists [feed, x, y, z, a] where:
+                        - feed: Feed rate
+                        - x: X coordinate
+                        - y: Y coordinate  
+                        - z: Z coordinate
+                        - a: A coordinate
+            
+        Returns:
+            bool: True if all commands were sent and acknowledged successfully
+        """
+        success = True
+
+        for feed, x, y, z, a in command_list:
+            # Format G1 command with all coordinates
+            command = f"G1 F{feed} X{x} Y{y} Z{z} A{a}\n"
+            
+            # Send the command
+            self.serial.write(command.encode("ascii"))
+            
+            # Wait for and verify the 'ok' response
+            response = ""
+            start_time = time.time()
+            timeout = 10  # 10-second timeout for safety
+            
+            while "ok" not in response:
+                if self.serial.in_waiting:
+                    new_data = self.serial.read(self.serial.in_waiting).decode("ascii")
+                    response += new_data
+                
+                # Check for timeout
+                if time.time() - start_time > timeout:
+                    print(f"Timeout waiting for 'ok' after command: {command.strip()}")
+                    success = False
+                    break
+                    
+                # Small delay to prevent CPU hogging
+                time.sleep(0.01)
+            
+            # Optional: Add a small delay between commands for stability
+            time.sleep(0.01)
+        
+        return success
 
     def send_g1_xy_commands(self, xy_tuples: list, feed:int) -> bool:
         """

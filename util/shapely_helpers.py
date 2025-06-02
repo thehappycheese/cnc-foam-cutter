@@ -1,7 +1,7 @@
 from pathlib import Path
 from shapely.geometry.base import BaseGeometry
 
-from .gatekept_itertools import split_indexable, sliding_window
+from ..airfoil._itertools import split_indexable, sliding_window
 import numpy as np
 
 def shapely_to_svg(shape:BaseGeometry, output:Path|str):
