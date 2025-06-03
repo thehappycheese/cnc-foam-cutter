@@ -31,6 +31,71 @@ from .util import (
 
 
 @dataclass
+class Decomposer:
+    upcut_kerf=0.1
+    buffer:float=0
+    tolerance=0.05
+    split_angle_deg=75
+    segment_target_length:float=1.0
+    _length_counts:list[int]|None = None
+
+    def decompose_many(self, airfoils:list[Airfoil]):
+        result = []
+        for airfoil in airfoils:
+            result.append(self.decompose(airfoil))
+        return result
+
+    def decompose(self, airfoil:Airfoil):
+        lsb = airfoil.get_with_holes(upcut_width=self.buffer*2+self.upcut_kerf, tolerance=self.tolerance)
+        if self.buffer>0:
+            lsb = lsb.buffer(self.buffer, quad_segs=1, join_style="mitre")
+        lsb = np.array(lsb.boundary.coords)[:-1]
+        
+        # change starting point to upper trailing edges
+        lsb = np.roll(lsb,-(lsb[:,0]+lsb[:,1]).argmax()-1, axis=0)[::-1]
+
+        # pick out the leading edge point
+        leading_edge_split = lsb[:,0].argmin()
+        lsbc_upper = lsb[:leading_edge_split+1]
+        lsbc_lower = lsb[leading_edge_split:]
+
+        upper_chunks = split_linestring_by_angle(lsbc_upper,split_angle_deg=self.split_angle_deg)
+        lower_chunks = split_linestring_by_angle(lsbc_lower,split_angle_deg=self.split_angle_deg)
+
+        decomposed = upper_chunks + lower_chunks
+
+        interpolated_chunks = []
+
+        # we previously used this and it decomposed to a different number of chunks
+        if self._length_counts is None:
+            self._length_counts = [len(item) for item in decomposed]
+        elif len(decomposed)!=len(self._length_counts):
+            raise ValueError(f"The airfoil was decomposed into {len(decomposed)} parts, but the last one was decomposed into {len(self._length_counts)} parts.")
+        
+
+        for chunk_index, chunk in enumerate(decomposed):
+            if len(chunk)<=2:
+                interpolated_chunks.append(chunk)
+            else:
+                
+                if self._length_counts is None:
+                    ls_len = np.linalg.norm(np.diff(chunk, axis=0), axis=1).sum()
+                    max_segment_length = self.segment_target_length
+                    assert isinstance(max_segment_length, float), f"segment_length_targets must either be a float or a list of floats the same length as the decomposed line segments: {len(decomposed)}"
+                    desired_segments = int(np.ceil(ls_len/max_segment_length))
+                else:
+                    desired_segments = self._length_counts[chunk_index]
+                
+
+                bspline, u = make_splprep(chunk.transpose())
+
+                # Evaluate the spline at many points for smooth curve
+                u_new = np.linspace(0, 1, desired_segments)
+                interpolated_chunks.append(bspline(u_new).transpose())
+        return interpolated_chunks
+        
+
+@dataclass
 class Hole:
     diameter_mm:float
     position:np.ndarray
@@ -153,6 +218,7 @@ class Airfoil:
             unary_union(shapes+upcuts)
         )
     
+    @deprecated("Use Decomposer.decompose instead")
     def decompose(
             self,
             upcut_kerf=0.1,
@@ -204,7 +270,7 @@ class Airfoil:
         return interpolated_chunks
     
     @classmethod
-    @deprecated("please use AirfoilPair.decompose")
+    @deprecated("please use Decomposer.decompose")
     def decompose_together(
             cls,
             a:Airfoil,
@@ -231,14 +297,15 @@ class Airfoil:
         )
         return ad, bd
     
-    def plot(self, ax:Axes|None=None, decompose_args:None|dict=None):
+    def plot(
+            self,
+            ax:Axes|None=None,
+            decomposer:Decomposer|None=None):
         if ax is None:
             fig,ax = plt.subplots(figsize=(10,10))
-        if decompose_args is None:
-            real_decompose_args = {}
-        else:
-            real_decompose_args = decompose_args
-        decomposed = self.decompose(**real_decompose_args)
+        if decomposer is None:
+            decomposer = Decomposer()
+        decomposed = decomposer.decompose(self)
         for chunk in decomposed:
             ax.plot(*chunk.transpose(),"o-",markersize=2)
         ax.set_aspect("equal")
@@ -258,60 +325,37 @@ class Airfoil:
     
     def to_mesh(
             self,
-            upcut_kerf=0.1,
-            buffer:float=0,
-            tolerance=0.05,
-            split_angle_deg=75,
-            segment_target_length_or_counts:float|list[int]=1.0
+            decomposer:Decomposer|None = None
         ):
-        chunks = self.decompose(
-            upcut_kerf=upcut_kerf,
-            buffer=buffer,
-            tolerance=tolerance,
-            split_angle_deg=split_angle_deg,
-            segment_target_length_or_counts=segment_target_length_or_counts
-        )
+        if decomposer is None:
+            decomposer = Decomposer()
+        chunks = decomposer.decompose(self)
         s =  ensure_closed(remove_sequential_duplicates(np.concat(chunks)))
-
-
         pol = Polygon(s)
         triangles = delaunay_triangles(pol)
-
         # Collect all vertices and faces
         all_vertices = []
         all_faces = []
         vertex_offset = 0
-
         for triangle in triangles.geoms:
             if pol.contains(triangle.centroid):
                 # Extract triangle vertices
                 coords = np.array(triangle.exterior.coords[:-1])  # Remove duplicate last point
-                
                 # Add to vertex list
                 all_vertices.extend(coords)
-                
                 # Create face indices (triangle with 3 vertices)
                 face = [3, vertex_offset, vertex_offset + 1, vertex_offset + 2]
                 all_faces.extend(face)
-                
                 vertex_offset += 3
-
-        # Convert to numpy arrays
         vertices_array = np.array(all_vertices)
         faces_array = np.array(all_faces)
-
-        # Add z=0 coordinate for 3D
         points_3d = np.insert(vertices_array, 2, 0, axis=-1)
-
-        # Create PyVista mesh
         mesh = pv.PolyData(points_3d, faces_array)
-
-        # Optional: merge duplicate vertices to create a proper connected mesh
         mesh = mesh.clean(tolerance=1e-6)
         return mesh#, [len(item) for item in chunks]
     
 @dataclass
-class AirfoilPair:
+class WingSegment:
     left:Airfoil
     right:Airfoil
     length:float
@@ -321,30 +365,21 @@ class AirfoilPair:
 
     def decompose(
         self,
-        upcut_kerf=0.1,
-        buffer:float=0,
-        tolerance=0.05,
-        split_angle_deg=75,
-        segment_target_length:float=1.0
+        decomposer:Decomposer|None=None
     ):
-        ad = self.left.decompose(
-            upcut_kerf                      = upcut_kerf,
-            buffer                          = buffer,
-            tolerance                       = tolerance,
-            split_angle_deg                 = split_angle_deg,
-            segment_target_length_or_counts = segment_target_length
-        )
-        bd = self.right.decompose(
-            upcut_kerf                      = upcut_kerf,
-            buffer                          = buffer,
-            tolerance                       = tolerance,
-            split_angle_deg                 = split_angle_deg,
-            segment_target_length_or_counts = [len(chunk) for chunk in ad]
-        )
+        if decomposer is None:
+            decomposer = Decomposer()
+        ad, bd = decomposer.decompose_many([self.left, self.right])
         return ad, bd
 
-    def to_mesh(self):
-        ad, bd = self.decompose()
+    def to_mesh(
+        self,
+        decomposer:Decomposer|None=None
+    ):
+        if decomposer is None:
+            decomposer = Decomposer()
+        
+        ad, bd = self.decompose(decomposer)
 
         a_3d = np.insert(
             ensure_closed(remove_sequential_duplicates(np.concat(ad))),
@@ -364,8 +399,8 @@ class AirfoilPair:
         # mesha = edgea.delaunay_2d(edge_source=edgea)
         # meshb = edgeb.delaunay_2d(edge_source=edgeb)
         lengths = [len(item) for item in ad]
-        mesha = self.left.to_mesh(segment_target_length_or_counts=lengths).rotate_x(90).rotate_z(90).translate((-self.length/2,0,0))
-        meshb = self.right.to_mesh(segment_target_length_or_counts=lengths).rotate_x(90).rotate_z(90).translate(( self.length/2,0,0))
+        mesha = self.left.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate((-self.length/2,0,0))
+        meshb = self.right.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate(( self.length/2,0,0))
 
         meshc = create_ruled_surface(a_3d,b_3d)
         mesh_target = (mesha + meshb + meshc).clean().fill_holes(hole_size=20)
