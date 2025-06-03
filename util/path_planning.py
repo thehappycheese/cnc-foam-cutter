@@ -144,6 +144,7 @@ def project_line_to_plane(
     
     return intersection
 
+@deprecated("use geometric_curvature2")
 def geometric_curvature(path:np.ndarray):
     p1, p2, p3 = path[:-2], path[1:-1], path[2:]
     
@@ -178,9 +179,13 @@ def map_to_range(values:np.ndarray, min:float, max:float):
     current_range = values.max()-values.min()
     return (values-values.min())/current_range*target_range+min
 
-def remove_sequential_duplicates(values:np.ndarray):
-    """values is assumed to be 2d"""
-    return values[np.concatenate(([True],np.all(values[:-1]!= values[1:], axis=1)))]
+def remove_sequential_duplicates(arr):
+    last = arr[0]
+    result = [last]
+    for item in arr[1:]:
+        if not np.array_equal(item, last):
+            result.append(item)
+    return np.array(result)
 
 def ensure_closed(values:np.ndarray):
     if np.equal(values[0],values[1]).all():

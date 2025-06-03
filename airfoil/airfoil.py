@@ -32,12 +32,12 @@ from .util import (
 
 @dataclass
 class Decomposer:
-    upcut_kerf=0.1
-    buffer:float=0
-    tolerance=0.05
-    split_angle_deg=75
-    segment_target_length:float=1.0
-    _length_counts:list[int]|None = None
+    upcut_kerf            :float=0.1
+    buffer                :float=0
+    tolerance             :float=0.05
+    split_angle_deg       :float=75
+    segment_target_length :float=1.0
+    _length_counts        :list[int]|None = None
 
     def decompose_many(self, airfoils:list[Airfoil]):
         result = []
@@ -67,9 +67,8 @@ class Decomposer:
         interpolated_chunks = []
 
         # we previously used this and it decomposed to a different number of chunks
-        if self._length_counts is None:
-            self._length_counts = [len(item) for item in decomposed]
-        elif len(decomposed)!=len(self._length_counts):
+        
+        if self._length_counts is not None and len(decomposed)!=len(self._length_counts):
             raise ValueError(f"The airfoil was decomposed into {len(decomposed)} parts, but the last one was decomposed into {len(self._length_counts)} parts.")
         
 
@@ -79,10 +78,11 @@ class Decomposer:
             else:
                 
                 if self._length_counts is None:
-                    ls_len = np.linalg.norm(np.diff(chunk, axis=0), axis=1).sum()
-                    max_segment_length = self.segment_target_length
-                    assert isinstance(max_segment_length, float), f"segment_length_targets must either be a float or a list of floats the same length as the decomposed line segments: {len(decomposed)}"
-                    desired_segments = int(np.ceil(ls_len/max_segment_length))
+                    #desired_segments = 20
+                    desired_segments = int(np.ceil(
+                        np.linalg.norm(np.diff(chunk, axis=0), axis=1).sum()
+                        /self.segment_target_length
+                    ))
                 else:
                     desired_segments = self._length_counts[chunk_index]
                 
@@ -92,6 +92,8 @@ class Decomposer:
                 # Evaluate the spline at many points for smooth curve
                 u_new = np.linspace(0, 1, desired_segments)
                 interpolated_chunks.append(bspline(u_new).transpose())
+        if self._length_counts is None:
+            self._length_counts = [len(item) for item in interpolated_chunks]
         return interpolated_chunks
         
 
@@ -208,8 +210,8 @@ class Airfoil:
         height=50
         upcuts = [
             geometry.box(
-                *(hole.position-np.array([upcut_width/2,-height])),
-                *(hole.position+np.array([upcut_width/2,0]))
+                *(hole.position+np.array([-upcut_width/2, 0])),
+                *(hole.position+np.array([ upcut_width  ,height]))
             ) for hole in self.holes
         ]
         
@@ -363,6 +365,22 @@ class WingSegment:
     def __repr__(self) -> str:
         return f"<AirfoilPair length={self.length:.1f} left={self.left} right={self.right} />"
 
+    def with_translation(self, translation:ArrayLike) -> WingSegment:
+        return replace(
+            self,
+            left  = self.left .with_translation(translation),
+            right = self.right.with_translation(translation),
+        )
+    
+    def bounding_size(self):
+        allpoints = np.concat([self.left.points, self.right.points])
+        size = allpoints.max(axis=0)-allpoints.min(axis=0)
+        return np.array([*size, self.length])
+    
+    def bounding_center(self):
+        allpoints = np.concat([self.left.points, self.right.points])
+        return np.array([0, *(allpoints.min(axis=0)+(allpoints.max(axis=0)-allpoints.min(axis=0))/2)])
+
     def decompose(
         self,
         decomposer:Decomposer|None=None
@@ -407,3 +425,5 @@ class WingSegment:
         mesh_target = mesh_target.compute_normals(auto_orient_normals=True)
         #assert mesh_target.is_manifold
         return mesh_target
+
+
