@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal
-from warnings import deprecated
+from warnings import deprecated, warn
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -14,7 +14,7 @@ from ._naca4 import naca4
 from ._naca5 import naca5
 from ._naca_parse import naca
 
-from shapely import LineString, Polygon, is_ccw, Point, delaunay_triangles
+from shapely import LineString, Polygon, is_ccw, Point, delaunay_triangles, intersection
 from shapely import geometry
 from shapely import difference, unary_union
 
@@ -32,10 +32,10 @@ from .util import (
 
 @dataclass
 class Decomposer:
-    upcut_kerf            :float=0.1
+    upcut_kerf            :float=0.01
     buffer                :float=0
     tolerance             :float=0.05
-    split_angle_deg       :float=75
+    split_angle_deg       :float=30
     segment_target_length :float=1.0
     _length_counts        :list[int]|None = None
 
@@ -46,12 +46,38 @@ class Decomposer:
         return result
 
     def decompose(self, airfoil:Airfoil):
-        lsb = airfoil.get_with_holes(upcut_width=self.buffer*2+self.upcut_kerf, tolerance=self.tolerance)
+
+        if all (hole.diameter_mm/2-self.buffer<self.buffer/2 for hole in airfoil.holes):
+            warn(f"some holes will be buffered down to minimum size of the buffer/2={self.buffer/2}mm")
+        shape_holes = [
+            Point(hole.position)
+            .buffer(max(self.buffer/4, hole.diameter_mm/2-self.buffer))
+            for hole
+            in airfoil.holes
+        ]
+        height=airfoil.bounding_size()[1]*10
+        shape_upcuts = [
+            geometry.box(
+                *(hole.position+np.array([-self.upcut_kerf/2, 0])),
+                *(hole.position+np.array([ self.upcut_kerf  ,height]))
+            ) for hole in airfoil.holes
+        ]
+        
+        shape_airfoil = airfoil.polygon().simplify(tolerance=self.tolerance)
+        shape_hinges = [] if airfoil.hinge is None else [airfoil.hinge.to_polygon()]
         if self.buffer>0:
-            lsb = lsb.buffer(self.buffer, quad_segs=1, join_style="mitre")
+            shape_airfoil = shape_airfoil.buffer(self.buffer,quad_segs=1, join_style="mitre")
+            shape_hinges = [hinge.buffer(-self.buffer,quad_segs=1,join_style="mitre") for hinge in shape_hinges]
+
+        lsb = difference(
+            airfoil.polygon().simplify(tolerance=self.tolerance).buffer(self.buffer),
+            unary_union(shape_holes+shape_upcuts+shape_hinges)
+        )
+
         lsb = np.array(lsb.boundary.coords)[:-1]
         
         # change starting point to upper trailing edges
+        # TODO: probably there is a more robust way to find this
         lsb = np.roll(lsb,-(lsb[:,0]+lsb[:,1]).argmax()-1, axis=0)[::-1]
 
         # pick out the leading edge point
@@ -95,6 +121,7 @@ class Decomposer:
         if self._length_counts is None:
             self._length_counts = [len(item) for item in interpolated_chunks]
         return interpolated_chunks
+    
         
 
 @dataclass
@@ -105,9 +132,51 @@ class Hole:
         assert self.position.shape == (2,), "position must have shape `(2)`"
 
 @dataclass
+class Hinge:
+    position: ArrayLike
+    angle_deg: float = 60
+    rotation_deg: float = -20
+    height: float = 300.0
+    
+    def __post_init__(self):
+        self.position = np.array(self.position)
+        assert self.position.shape == (2,), "upper_point must have shape `(2)`"
+        assert 0 < self.angle_deg <= 180, "angle_deg must be between 0 and 180 degrees"
+    
+    def to_polygon(self) -> Polygon:
+        """Generate the equilateral triangle polygon based on parameters."""
+        # Calculate the base width from the angle and height
+        # For an equilateral triangle, if we know the angle at the top and height,
+        # we can calculate the base width
+        half_base = self.height * np.tan(np.deg2rad(self.angle_deg / 2))
+        
+        # Create triangle points relative to origin (upper point at origin, pointing down)
+        triangle_points = np.array([
+            [0, 0],  # upper point
+            [-half_base, -self.height],  # bottom left
+            [half_base, -self.height],   # bottom right
+            [0, 0]   # close the triangle
+        ])
+        
+        # Apply rotation
+        if self.rotation_deg != 0:
+            rotation_rad = np.deg2rad(self.rotation_deg)
+            rotation_matrix = np.array([
+                [np.cos(rotation_rad), -np.sin(rotation_rad)],
+                [np.sin(rotation_rad),  np.cos(rotation_rad)]
+            ])
+            triangle_points = triangle_points @ rotation_matrix
+        
+        # Translate to the actual upper point position
+        triangle_points = triangle_points + self.position.reshape(1, -1)
+        
+        return Polygon(triangle_points)
+
+@dataclass
 class Airfoil:
     points:np.ndarray = field()
     holes:list[Hole] = field(default_factory=list)
+    hinge:Hinge|None = None
 
     def __repr__(self) -> str:
         size = np.max(self.points,axis=0) - np.min(self.points,axis=0)
@@ -174,13 +243,32 @@ class Airfoil:
     def with_holes(self, holes:list[Hole]) -> Airfoil:
         return replace(self, holes=holes)
     
+    def with_hinge(self, hinge:Hinge|None, upper_thickness:float|None=None) -> Airfoil:
+        if upper_thickness is not None and hinge is not None:
+            shape = intersection(
+                self.polygon(),
+                LineString([[hinge.position[0],-500],[hinge.position[0],500]])
+            )
+            hinge = replace(
+                hinge,
+                position=np.array([
+                    hinge.position[0],
+                    np.array(shape.coords)[:,1].max()-upper_thickness,
+                ])
+            )
+        return replace(self, hinge=hinge)
+    
     def with_translation(self, translation:ArrayLike)->Airfoil:
         translation = np.array(translation)
         assert translation.shape==(2,), "Translation must be an ndarray of shape (2,)"
         return replace(
             self,
             points = self.points+translation.reshape(1,-1),
-            holes = [replace(hole,position=hole.position+translation) for hole in self.holes]
+            holes  = [replace(hole,position=hole.position+translation) for hole in self.holes],
+            hinge  = None if self.hinge is None else replace(
+                self.hinge, 
+                position=self.hinge.position + translation
+            ),
         )
     
     def with_rotation(self, rotation_deg:float)->Airfoil:
@@ -192,7 +280,12 @@ class Airfoil:
         return replace(
             self,
             points = self.points @ rotation_matrix,
-            holes  = [replace(hole, position=hole.position@rotation_matrix) for hole in self.holes]
+            holes  = [replace(hole, position=hole.position@rotation_matrix) for hole in self.holes],
+            hinge  = None if self.hinge is None else replace(
+                self.hinge,
+                upper_point  = self.hinge.position @ rotation_matrix,
+                rotation_deg = self.hinge.rotation_deg + rotation_deg
+            ),
         )
 
     def show(self):
@@ -204,100 +297,6 @@ class Airfoil:
     
     def polygon(self) -> Polygon:
         return Polygon(self.points)
-
-    def get_with_holes(self, upcut_width=1.3, tolerance=0.05) -> Polygon:
-        shapes = [Point(hole.position).buffer(hole.diameter_mm/2) for hole in self.holes]
-        height=50
-        upcuts = [
-            geometry.box(
-                *(hole.position+np.array([-upcut_width/2, 0])),
-                *(hole.position+np.array([ upcut_width  ,height]))
-            ) for hole in self.holes
-        ]
-        
-        return difference(
-            self.polygon().simplify(tolerance=tolerance),
-            unary_union(shapes+upcuts)
-        )
-    
-    @deprecated("Use Decomposer.decompose instead")
-    def decompose(
-            self,
-            upcut_kerf=0.1,
-            buffer:float=0,
-            tolerance=0.05,
-            split_angle_deg=75,
-            segment_target_length_or_counts:float|list[int]=1.0,
-        ):
-        lsb = self.get_with_holes(upcut_width=buffer*2+upcut_kerf, tolerance=tolerance)
-        if buffer>0:
-            lsb = lsb.buffer(buffer, quad_segs=1, join_style="mitre")
-        lsb = np.array(lsb.boundary.coords)[:-1]
-        
-        # change starting point to upper trailing edge
-        lsb = np.roll(lsb,-(lsb[:,0]+lsb[:,1]).argmax()-1, axis=0)[::-1]
-
-        # pick out the leading edge point
-        leading_edge_split = lsb[:,0].argmin()
-        lsbc_upper = lsb[:leading_edge_split+1]
-        lsbc_lower = lsb[leading_edge_split:]
-
-        upper_chunks = split_linestring_by_angle(lsbc_upper,split_angle_deg=split_angle_deg)
-        lower_chunks = split_linestring_by_angle(lsbc_lower,split_angle_deg=split_angle_deg)
-
-        decomposed = upper_chunks + lower_chunks
-
-        interpolated_chunks = []
-
-        assert isinstance(segment_target_length_or_counts, float) or (isinstance(segment_target_length_or_counts, list) and len(decomposed)==len(segment_target_length_or_counts)), f"segment_length_targets must either be a float or a list of floats the same length as the decomposed line segments: {len(decomposed)}"
-        for chunk_index, chunk in enumerate(decomposed):
-            if len(chunk)<=2:
-                interpolated_chunks.append(chunk)
-            else:
-                
-                if isinstance(segment_target_length_or_counts, float):
-                    ls_len = np.linalg.norm(np.diff(chunk, axis=0), axis=1).sum()
-                    max_segment_length = segment_target_length_or_counts
-                    assert isinstance(max_segment_length, float), f"segment_length_targets must either be a float or a list of floats the same length as the decomposed line segments: {len(decomposed)}"
-                    desired_segments = int(np.ceil(ls_len/max_segment_length))
-                elif isinstance(segment_target_length_or_counts, list):
-                    desired_segments = int(segment_target_length_or_counts[chunk_index])
-                
-
-                bspline, u = make_splprep(chunk.transpose())
-
-                # Evaluate the spline at many points for smooth curve
-                u_new = np.linspace(0, 1, desired_segments)
-                interpolated_chunks.append(bspline(u_new).transpose())
-        return interpolated_chunks
-    
-    @classmethod
-    @deprecated("please use Decomposer.decompose")
-    def decompose_together(
-            cls,
-            a:Airfoil,
-            b:Airfoil,
-            upcut_kerf=0.1,
-            buffer:float=0,
-            tolerance=0.05,
-            split_angle_deg=75,
-            segment_target_length:float=1.0
-        ):
-        ad = a.decompose(
-            upcut_kerf=upcut_kerf,
-            buffer=buffer,
-            tolerance=tolerance,
-            split_angle_deg=split_angle_deg,
-            segment_target_length_or_counts=segment_target_length
-        )
-        bd = b.decompose(
-            upcut_kerf=upcut_kerf,
-            buffer=buffer,
-            tolerance=tolerance,
-            split_angle_deg=split_angle_deg,
-            segment_target_length_or_counts=[len(chunk) for chunk in ad]
-        )
-        return ad, bd
     
     def plot(
             self,
@@ -355,6 +354,12 @@ class Airfoil:
         mesh = pv.PolyData(points_3d, faces_array)
         mesh = mesh.clean(tolerance=1e-6)
         return mesh#, [len(item) for item in chunks]
+    
+    def bounding_size(self):
+        return self.points.max(axis=1)-self.points.min(axis=1)
+    
+    def bounding_center(self):
+        return self.points.min(axis=1)+self.bounding_size()/2
     
 @dataclass
 class WingSegment:
