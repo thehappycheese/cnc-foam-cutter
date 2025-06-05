@@ -68,8 +68,9 @@ def remove_sequential_duplicates(arr):
     last = arr[0]
     result = [last]
     for item in arr[1:]:
-        if not np.array_equal(item, last):
+        if not np.allclose(item, last):
             result.append(item)
+            last = item
     return np.array(result)
 
 def ensure_closed(values:np.ndarray):
@@ -77,3 +78,57 @@ def ensure_closed(values:np.ndarray):
         return values
     else:
         return np.concat([values,[values[0]]])
+
+def linear_interpolation(chunk:np.ndarray, desired_segments:int):
+    # Calculate cumulative distances along the chunk
+    segment_lengths = np.linalg.norm(chunk[1:] - chunk[:-1], axis=-1)
+    distances = np.concatenate([[0], segment_lengths.cumsum()])
+    
+    total_distance = distances[-1]
+    
+    # Create new points at evenly spaced distances
+    target_distances = np.linspace(0, total_distance, desired_segments)
+    interpolated_points = []
+
+    base_index    = 0
+    for target_distance in target_distances:
+        while base_index<len(chunk)-1:
+            next_distance = distances[base_index+1]
+            if target_distance <= next_distance:
+                base_distance = distances[base_index]
+                t = (target_distance-base_distance)/(next_distance-base_distance)
+                interpolated_points.append(chunk[base_index]+t*(chunk[base_index+1]-chunk[base_index]))
+                break
+            else:
+                base_index+=1
+        if base_index==len(chunk)-1:
+                interpolated_points.append(chunk[-1])
+                break
+    return np.array(interpolated_points)
+
+def linear_resampling_to_length(chunk:np.ndarray, desired_segment_length:float):
+    
+    segment_lengths = np.linalg.norm(chunk[1:] - chunk[:-1], axis=-1)
+    distances = np.concatenate([[0], segment_lengths.cumsum()])
+    
+    total_distance = distances[-1]
+    
+    # Create new points at evenly spaced distances
+    target_distances = np.linspace(0, total_distance, int(np.ceil(total_distance/desired_segment_length)))
+    interpolated_points = []
+
+    base_index    = 0
+    for target_distance in target_distances:
+        while base_index<len(chunk)-1:
+            next_distance = distances[base_index+1]
+            if target_distance <= next_distance:
+                base_distance = distances[base_index]
+                t = (target_distance-base_distance)/(next_distance-base_distance)
+                interpolated_points.append(chunk[base_index]+t*(chunk[base_index+1]-chunk[base_index]))
+                break
+            else:
+                base_index+=1
+        if base_index==len(chunk)-1:
+                interpolated_points.append(chunk[-1])
+                break
+    return np.array(interpolated_points)

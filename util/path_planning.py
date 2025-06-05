@@ -2,7 +2,8 @@ from typing import Literal
 import numpy as np
 from shapely import Polygon
 from warnings import deprecated
-
+from scipy import ndimage
+from scipy.signal.windows import gaussian
 
 def split_and_roll(polygon:Polygon)->np.ndarray:
     lsb = np.array(polygon.boundary.coords)[:-1]
@@ -144,7 +145,22 @@ def project_line_to_plane(
     
     return intersection
 
-@deprecated("use geometric_curvature2")
+def deflection_angle(path:np.ndarray):
+    a, b, c = path[:-2], path[1:-1], path[2:]
+    ab = b-a
+    bc = c-b
+    
+    # dot product
+    abdotbc = ab[:,0]*bc[:,0]+ab[:,1]*bc[:,1]
+    items = abdotbc / (
+            np.linalg.norm(ab, axis=-1)
+            * np.linalg.norm(bc, axis=-1)
+        )
+    #assert not np.isnan(items).any()
+    deflection_angle = np.acos(np.clip(items,-1,1))
+    return np.pad(deflection_angle, (1, 1), mode='edge')
+
+@deprecated("use deflection_angle")
 def geometric_curvature(path:np.ndarray):
     p1, p2, p3 = path[:-2], path[1:-1], path[2:]
     
@@ -168,9 +184,7 @@ def geometric_curvature(path:np.ndarray):
     return padded_curvature
 
 def blur1d(values, count=31, std=6):
-    from scipy import ndimage
-    from scipy.signal.windows import gaussian
-    blur_kernel = gaussian(31,6)
+    blur_kernel = gaussian(count,std)
     blur_kernel /= blur_kernel.sum()
     return ndimage.convolve1d(values,blur_kernel)
 
@@ -179,20 +193,13 @@ def map_to_range(values:np.ndarray, min:float, max:float):
     current_range = values.max()-values.min()
     return (values-values.min())/current_range*target_range+min
 
-def remove_sequential_duplicates(arr):
-    last = arr[0]
-    result = [last]
-    for item in arr[1:]:
-        if not np.array_equal(item, last):
-            result.append(item)
-    return np.array(result)
-
 def ensure_closed(values:np.ndarray):
     if np.equal(values[0],values[1]).all():
         return values
     else:
         return np.concat([values,[values[0]]])
 
+@deprecated("Use deflection_angle")
 def geometric_curvature2(path: np.ndarray):
     """
     Most robust n-dimensional curvature using sine of angle approach.

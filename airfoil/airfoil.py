@@ -10,10 +10,6 @@ from scipy.interpolate import make_splprep
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
-from ._naca4 import naca4
-from ._naca5 import naca5
-from ._naca_parse import naca
-
 from shapely import LineString, Polygon, is_ccw, Point, delaunay_triangles, intersection
 from shapely import geometry
 from shapely import difference, unary_union
@@ -21,12 +17,16 @@ from shapely import difference, unary_union
 
 import pyvista as pv
 
+from ._naca4 import naca4
+from ._naca5 import naca5
+from ._naca_parse import naca
 from .util import (
     create_ruled_surface,
     shapely_to_svg,
     split_linestring_by_angle,
     remove_sequential_duplicates,
     ensure_closed,
+    linear_interpolation,
 )
 
 
@@ -47,8 +47,9 @@ class Decomposer:
 
     def decompose(self, airfoil:Airfoil):
 
-        if all (hole.diameter_mm/2-self.buffer<self.buffer/2 for hole in airfoil.holes):
+        if any(hole.diameter_mm/2-self.buffer<self.buffer/2 for hole in airfoil.holes):
             warn(f"some holes will be buffered down to minimum size of the buffer/2={self.buffer/2}mm")
+
         shape_holes = [
             Point(hole.position)
             .buffer(max(self.buffer/4, hole.diameter_mm/2-self.buffer))
@@ -62,7 +63,7 @@ class Decomposer:
                 *(hole.position+np.array([ self.upcut_kerf  ,height]))
             ) for hole in airfoil.holes
         ]
-        
+
         shape_airfoil = airfoil.polygon().simplify(tolerance=self.tolerance)
         shape_hinges = [] if airfoil.hinge is None else [airfoil.hinge.to_polygon()]
         if self.buffer>0:
@@ -73,54 +74,67 @@ class Decomposer:
             airfoil.polygon().simplify(tolerance=self.tolerance).buffer(self.buffer),
             unary_union(shape_holes+shape_upcuts+shape_hinges)
         )
-
-        lsb = np.array(lsb.boundary.coords)[:-1]
-        
-        # change starting point to upper trailing edges
-        # TODO: probably there is a more robust way to find this
+        lsb = np.array(lsb.boundary.coords)
         lsb = np.roll(lsb,-(lsb[:,0]+lsb[:,1]).argmax()-1, axis=0)[::-1]
 
-        # pick out the leading edge point
+        lsb = remove_sequential_duplicates(lsb)
+
         leading_edge_split = lsb[:,0].argmin()
         lsbc_upper = lsb[:leading_edge_split+1]
         lsbc_lower = lsb[leading_edge_split:]
-
         upper_chunks = split_linestring_by_angle(lsbc_upper,split_angle_deg=self.split_angle_deg)
         lower_chunks = split_linestring_by_angle(lsbc_lower,split_angle_deg=self.split_angle_deg)
+        chunks = upper_chunks+lower_chunks
 
-        decomposed = upper_chunks + lower_chunks
-
-        interpolated_chunks = []
-
-        # we previously used this and it decomposed to a different number of chunks
-        
-        if self._length_counts is not None and len(decomposed)!=len(self._length_counts):
-            raise ValueError(f"The airfoil was decomposed into {len(decomposed)} parts, but the last one was decomposed into {len(self._length_counts)} parts.")
-        
-
-        for chunk_index, chunk in enumerate(decomposed):
-            if len(chunk)<=2:
-                interpolated_chunks.append(chunk)
-            else:
-                
-                if self._length_counts is None:
-                    #desired_segments = 20
-                    desired_segments = int(np.ceil(
-                        np.linalg.norm(np.diff(chunk, axis=0), axis=1).sum()
-                        /self.segment_target_length
-                    ))
-                else:
-                    desired_segments = self._length_counts[chunk_index]
-                
-
-                bspline, u = make_splprep(chunk.transpose())
-
-                # Evaluate the spline at many points for smooth curve
-                u_new = np.linspace(0, 1, desired_segments)
-                interpolated_chunks.append(bspline(u_new).transpose())
         if self._length_counts is None:
-            self._length_counts = [len(item) for item in interpolated_chunks]
-        return interpolated_chunks
+            result = []
+            for chunk in chunks:
+                new_segment_count = int(np.ceil(np.linalg.norm(np.diff(chunk,axis=0),axis=1).sum()/self.segment_target_length))
+                if len(chunk)<=4:
+                    #linear
+                    result.append(linear_interpolation(chunk, new_segment_count))
+                else:
+                    try:
+                        bspline, u = make_splprep(chunk.transpose())
+                        u_new = np.linspace(0, 1, new_segment_count)
+                        interped = bspline(u_new).transpose()
+                        assert self._is_valid_interpolation_result(interped)
+                    except:
+                        warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
+                        interped = linear_interpolation(chunk, new_segment_count)
+                    result.append(interped)
+            self._length_counts = [len(chunk) for chunk in result]
+        else:
+            result = []
+            for new_segment_count, chunk in zip(self._length_counts, chunks):
+                if len(chunk)<=4:
+                    #linear
+                    result.append(linear_interpolation(chunk, new_segment_count))
+                else:
+                    try:
+                        bspline, u = make_splprep(chunk.transpose())
+                        u_new = np.linspace(0, 1, new_segment_count)
+                        interped = bspline(u_new).transpose()
+                        assert self._is_valid_interpolation_result(interped)
+                    except:
+                        warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
+                        interped = linear_interpolation(chunk, new_segment_count)
+                    result.append(interped)
+        return result
+
+    def _is_valid_interpolation_result(self, result):
+        """Check if interpolation result is valid"""
+        
+        # Check for NaN or infinite values
+        if not np.isfinite(result).all():
+            return False
+        
+        # Check if result has reasonable variance (not all points the same)
+        if np.allclose(result, result[0], atol=1e-10):
+            return False
+        
+        return True
+
     
         
 

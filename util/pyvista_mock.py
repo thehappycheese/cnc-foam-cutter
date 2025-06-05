@@ -10,8 +10,8 @@ def carriage():
         resolution=12
     )
     noz["colors"]="red"
-    print(noz.points.min(axis=0))
-    print(noz.points.max(axis=0))
+    #print(noz.points.min(axis=0))
+    #print(noz.points.max(axis=0))
     
     hex = pv.Polygon(
         center=(-2.4-3,0,0),
