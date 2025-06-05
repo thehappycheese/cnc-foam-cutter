@@ -190,3 +190,10 @@ start:
 coolant:
   mist_pin: gpio.21
   delay_ms: 0
+#PWM:
+#  output_pin: gpio.25
+#  enable_pin: gpio.4
+#  direction_pin: NO_PIN
+#  pwm_hz: 5000
+#  off_on_alarm: true
+#  speed_map: 0=0.000% 1000=0.000% 24000=100.000%

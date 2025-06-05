@@ -20,7 +20,7 @@ import pyvista as pv
 from ._naca4 import naca4
 from ._naca5 import naca5
 from ._naca_parse import naca
-from .util import (
+from ._util import (
     create_ruled_surface,
     shapely_to_svg,
     split_linestring_by_angle,
