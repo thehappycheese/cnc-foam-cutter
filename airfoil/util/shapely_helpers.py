@@ -141,22 +141,17 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
         
         # End marker (empty circle)
         end_x, end_y = coords[-1]
-        end_circle = patches.Circle((end_x, end_y), radius=4.5, facecolor='white', 
-                                  edgecolor=color, linewidth=2, zorder=8)
-        ax.add_patch(end_circle)
+        ax.plot(end_x, end_y, marker='o', fillstyle='none', markersize=6, 
+                markeredgecolor=color, markerfacecolor='white', markeredgewidth=2, 
+                linestyle='None', zorder=8)
         
-        
-        # Start marker (play symbol - right-pointing triangle)
+        # Start marker (right-pointing triangle)
         start_x, start_y = coords[0]
-        start_triangle = patches.RegularPolygon((start_x, start_y), 6, radius=2.5, 
-                                              orientation=0, facecolor=color, 
-                                              edgecolor='black', linewidth=1, zorder=100)
-        ax.add_patch(start_triangle)
-        
-        
+        ax.plot(start_x, start_y, marker=(3, 0, 0), markersize=8, 
+                markerfacecolor=color, markeredgecolor='black', markeredgewidth=1, 
+                linestyle='None', zorder=100)
         
         # Directional arrows along the path
-        arrow_count = 0
         for i in range(1, len(coords) - 1, arrow_spacing):
             if i >= len(coords):
                 break
@@ -166,21 +161,19 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
             curr_pt = coords[i]
             next_pt = coords[i+1] if i+1 < len(coords) else coords[i]
             
-            # Calculate direction angle
+            # Calculate direction angle and convert to degrees
             angle = get_direction_angle(prev_pt, next_pt)
+            angle_degrees = np.degrees(angle) + 90  # +90 to match original orientation
             
-            # Create chevron/caret arrow
+            # Create rotated triangle arrow
             x, y = curr_pt
-            arrow = patches.RegularPolygon((x, y), 3, radius=8, 
-                                        orientation=angle + np.pi/2, 
-                                        facecolor=color, edgecolor=color, 
-                                        linewidth=0.5, zorder=10)
-            ax.add_patch(arrow)
-            arrow_count += 1
+            ax.plot(x, y, marker=(3, 0, angle_degrees), markersize=10, 
+                    markerfacecolor=color, markeredgecolor=color, markeredgewidth=0.5, 
+                    linestyle='None', zorder=10)
         
         # Add part label if provided
         if part_label:
-            mid_idx = 0#len(coords) // 2
+            mid_idx = 0
             mid_x, mid_y = coords[mid_idx]
             ax.annotate(
                 part_label,
@@ -191,7 +184,6 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
                 fontweight='bold',
                 ha='center',
                 va='center',
-
                 bbox=dict(
                     boxstyle='round,pad=0.3',
                     facecolor='white',
@@ -315,7 +307,7 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
     
     # Add legend if we have handles and legend is enabled
     if handles and show_legend:
-        ax.legend(handles, labels)
+        ax.legend(handles, labels, bbox_to_anchor=(1.05, 0.5), loc='center left')
     
     return ax
 
