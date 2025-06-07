@@ -9,11 +9,11 @@ from airfoil.util.array_helpers import blur1d, map_to_range, remove_sequential_d
 
 from .cnc_machine_mesh import axis
 from ..util.pyvista_helpers import create_ruled_surface
-from ..util.path_planning import (
-    project_line_to_plane,
+from ..util.path_planning import project_line_to_plane
+from airfoil.util.linestring_helpers import (
+    deflection_angle_padded,
     ensure_closed,
 )
-from airfoil.util.linestring_helpers import deflection_angle_padded, linear_resampling_to_length
 from dataclasses import dataclass, replace, field
 from .._airfoil import WingSegment, Decomposer
 

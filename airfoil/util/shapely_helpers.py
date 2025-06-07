@@ -151,14 +151,14 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
         
         # End marker (empty circle)
         end_x, end_y = coords[-1]
-        ax.plot(end_x, end_y, marker='o', fillstyle='none', markersize=6, 
-                markeredgecolor=color, markerfacecolor='white', markeredgewidth=2, 
+        ax.plot(end_x, end_y, marker=(5, 0, 0), fillstyle='none', markersize=15, 
+                markeredgecolor=color, markerfacecolor='white', markeredgewidth=1, 
                 linestyle='None', zorder=8)
         
         # Start marker (right-pointing triangle)
         start_x, start_y = coords[0]
-        ax.plot(start_x, start_y, marker=(3, 0, 0), markersize=8, 
-                markerfacecolor=color, markeredgecolor='black', markeredgewidth=1, 
+        ax.plot(start_x, start_y, marker=(5, 0, 0), markersize=8, 
+                markerfacecolor=color, markeredgecolor='white', markeredgewidth=1, 
                 linestyle='None', zorder=100)
         
         # Directional arrows along the path
@@ -177,7 +177,7 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
             
             # Create rotated triangle arrow
             x, y = curr_pt
-            ax.plot(x, y, marker=(3, 0, angle_degrees), markersize=10, 
+            ax.plot(x, y, marker=(3, 0, angle_degrees), markersize=9, 
                     markerfacecolor=color, markeredgecolor=color, markeredgewidth=0.5, 
                     linestyle='None', zorder=10)
         
@@ -207,25 +207,39 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
         color = colors[i % len(colors)]
         label = legend_labels[i] if i < len(legend_labels) else str(i)
         
-        # Count existing artists before adding new ones (for marker fixing)
-        existing_lines = len(ax.lines)
-        existing_patches = len(ax.patches)
-        existing_collections = len(ax.collections)
+        def fix_shapely_markers(artists, color):
+            """Fix markers from Shapely plotting functions"""
+            if isinstance(artists, tuple):
+                # Handle tuple return (PathPatch, Line2D)
+                for artist in artists:
+                    if hasattr(artist, 'get_marker') and artist.get_marker() != 'None':
+                        artist.set_markerfacecolor(color)
+                        artist.set_markeredgecolor(color)
+                        artist.set_markersize(2)
+            elif hasattr(artists, 'get_marker') and artists.get_marker() != 'None':
+                # Handle single Line2D return
+                artists.set_markerfacecolor(color)
+                artists.set_markeredgecolor(color)
+                artists.set_markersize(2)
         
         match shp.geom_type:
             case "LineString" | "LinearRing":
                 # Plot the line first
-                handle = plot_line(shp, ax, color=color, linewidth=2, label=label)
+                artists = plot_line(shp, ax, color=color, linewidth=2, label=label)
+                fix_shapely_markers(artists, color)
                 plot_directional_markers(shp.coords, color)
                 
+                # Get handle for legend (first artist if tuple, otherwise the artist itself)
+                handle = artists[0] if isinstance(artists, tuple) else artists
                 if handle and show_legend:
                     handles.append(handle)
                     labels.append(label)
             
             case "Polygon":
                 # Plot the polygon first
-                handle = plot_polygon(shp, ax, facecolor=color, alpha=0.3, 
+                artists = plot_polygon(shp, ax, facecolor=color, alpha=0.3, 
                                     edgecolor=color, linewidth=2, label=label)
+                fix_shapely_markers(artists, color)
                 
                 # Plot exterior boundary with direction
                 plot_directional_markers(shp.exterior.coords, color)
@@ -234,6 +248,8 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
                 for j, interior in enumerate(shp.interiors):
                     plot_directional_markers(interior.coords, color, f"H{j}")
                 
+                # Get handle for legend (first artist if tuple, otherwise the artist itself)
+                handle = artists[0] if isinstance(artists, tuple) else artists
                 if handle and show_legend:
                     handles.append(handle)
                     labels.append(label)
@@ -242,12 +258,15 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
                 # Plot all parts with same color but label each part
                 for j, line in enumerate(shp.geoms):
                     if j == 0:
-                        handle = plot_line(line, ax, color=color, linewidth=2, label=label)
+                        artists = plot_line(line, ax, color=color, linewidth=2, label=label)
+                        fix_shapely_markers(artists, color)
+                        handle = artists[0] if isinstance(artists, tuple) else artists
                         if handle and show_legend:
                             handles.append(handle)
                             labels.append(label)
                     else:
-                        plot_line(line, ax, color=color, linewidth=2)
+                        artists = plot_line(line, ax, color=color, linewidth=2)
+                        fix_shapely_markers(artists, color)
                     
                     plot_directional_markers(line.coords, color, str(j))
             
@@ -255,14 +274,17 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
                 # Plot all parts with same color but label each part
                 for j, poly in enumerate(shp.geoms):
                     if j == 0:
-                        handle = plot_polygon(poly, ax, facecolor=color, alpha=0.3, 
+                        artists = plot_polygon(poly, ax, facecolor=color, alpha=0.3, 
                                             edgecolor=color, linewidth=2, label=label)
+                        fix_shapely_markers(artists, color)
+                        handle = artists[0] if isinstance(artists, tuple) else artists
                         if handle and show_legend:
                             handles.append(handle)
                             labels.append(label)
                     else:
-                        plot_polygon(poly, ax, facecolor=color, alpha=0.3, 
-                                   edgecolor=color, linewidth=2)
+                        artists = plot_polygon(poly, ax, facecolor=color, alpha=0.3, 
+                                           edgecolor=color, linewidth=2)
+                        fix_shapely_markers(artists, color)
                     
                     # Plot exterior with part label
                     plot_directional_markers(poly.exterior.coords, color, str(j))
@@ -296,27 +318,36 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
                     ax.text(x + 1, y + 1, str(j), fontsize=8, fontweight='bold',
                            ha='left', va='bottom', bbox=dict(boxstyle='round,pad=0.2',
                            facecolor='white', edgecolor=color, alpha=0.8))
-        
-        # Fix any markers that were added by Shapely's plotting functions
-        for line in ax.lines[existing_lines:]:
-            if line.get_marker() != 'None':  # Line has markers
-                line.set_markerfacecolor(color)
-                line.set_markeredgecolor(color)
-                line.set_markersize(2)
-        
-        # Fix collections (scatter plots, etc.)
-        for collection in ax.collections[existing_collections:]:
-            if hasattr(collection, 'set_facecolors'):
-                collection.set_facecolors([color])
-            if hasattr(collection, 'set_edgecolors'):
-                collection.set_edgecolors([color])
-            if hasattr(collection, 'set_sizes'):
-                collection.set_sizes([9])  # markersize=3 corresponds to size=9 (3^2)
     
     ax.set_aspect("equal")
     
     # Add legend if we have handles and legend is enabled
     if handles and show_legend:
-        ax.legend(handles, labels, bbox_to_anchor=(1.05, 0.5), loc='center left')
+        # Create additional legend entries for directional markers
+        legend_handles = handles.copy()
+        legend_labels = labels.copy()
+        
+        # Add start marker to legend
+        start_marker = plt.Line2D([0], [0], marker=(5, 0, 0), markersize=8, 
+                                 markerfacecolor='gray', markeredgecolor='white', markeredgewidth=1,
+                                 linestyle='', label='Start')
+        legend_handles.append(start_marker)
+        legend_labels.append('Start')
+        
+        # Add end marker to legend
+        end_marker = plt.Line2D([0], [0], marker=(5, 0, 0), fillstyle='none', markersize=15,
+                               markeredgecolor='gray', markerfacecolor='white', markeredgewidth=1,
+                               linestyle='', label='End')
+        legend_handles.append(end_marker)
+        legend_labels.append('End')
+        
+        # Add direction arrow to legend
+        arrow_marker = plt.Line2D([0], [0], marker=(3, 0, 90), markersize=9,
+                                 markerfacecolor='gray', markeredgecolor='gray', markeredgewidth=0.5,
+                                 linestyle='', label='Direction')
+        legend_handles.append(arrow_marker)
+        legend_labels.append('Direction')
+        
+        ax.legend(legend_handles, legend_labels, bbox_to_anchor=(1.05, 0.5), loc='center left')
     
     return ax
