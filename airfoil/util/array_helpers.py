@@ -1,3 +1,4 @@
+from warnings import deprecated
 from collections import deque
 from itertools import islice, pairwise
 from typing import Generator, Iterable, Sequence

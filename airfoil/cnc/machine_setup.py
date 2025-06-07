@@ -13,7 +13,7 @@ from ..util.path_planning import (
     project_line_to_plane,
     ensure_closed,
 )
-from airfoil.util.linestring_helpers import deflection_angle_padded, linear_resampling_to_length
+from airfoil.util.linestring_helpers import deflection_angle_padded, resample_linear_to_segment_length
 from dataclasses import dataclass, replace, field
 from .._airfoil import WingSegment, Decomposer
 

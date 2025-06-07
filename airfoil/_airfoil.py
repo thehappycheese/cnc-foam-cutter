@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal
-from warnings import warn
+from warnings import warn, deprecated
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -18,7 +18,7 @@ import pyvista as pv
 
 from .naca import naca, naca4, naca5
 from .util.array_helpers import remove_sequential_duplicates
-from .util.linestring_helpers import split_linestring_by_angle, ensure_closed, linear_interpolation
+from .util.linestring_helpers import split_linestring_by_angle, ensure_closed, resample_linear_to_number_of_segments
 from .util.pyvista_helpers import create_ruled_surface
 
 @dataclass
@@ -83,7 +83,7 @@ class Decomposer:
                 new_segment_count = int(np.ceil(np.linalg.norm(np.diff(chunk,axis=0),axis=1).sum()/self.segment_target_length))
                 if len(chunk)<=4:
                     #linear
-                    result.append(linear_interpolation(chunk, new_segment_count))
+                    result.append(resample_linear_to_number_of_segments(chunk, new_segment_count))
                 else:
                     try:
                         bspline, u = make_splprep(chunk.transpose())
@@ -92,7 +92,7 @@ class Decomposer:
                         assert self._is_valid_interpolation_result(interped)
                     except:
                         warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
-                        interped = linear_interpolation(chunk, new_segment_count)
+                        interped = resample_linear_to_number_of_segments(chunk, new_segment_count)
                     result.append(interped)
             self._length_counts = [len(chunk) for chunk in result]
         else:
@@ -100,7 +100,7 @@ class Decomposer:
             for new_segment_count, chunk in zip(self._length_counts, chunks):
                 if len(chunk)<=4:
                     #linear
-                    result.append(linear_interpolation(chunk, new_segment_count))
+                    result.append(resample_linear_to_number_of_segments(chunk, new_segment_count))
                 else:
                     try:
                         bspline, u = make_splprep(chunk.transpose())
@@ -109,7 +109,7 @@ class Decomposer:
                         assert self._is_valid_interpolation_result(interped)
                     except:
                         warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
-                        interped = linear_interpolation(chunk, new_segment_count)
+                        interped = resample_linear_to_number_of_segments(chunk, new_segment_count)
                     result.append(interped)
         return result
 
