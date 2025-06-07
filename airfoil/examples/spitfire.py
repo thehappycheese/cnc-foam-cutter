@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
-from airfoil.airfoil import Airfoil, WingSegment, Hole, Hinge
+from airfoil._airfoil import Airfoil, WingSegment, Hole, Hinge
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
@@ -21,10 +21,16 @@ class SpitfireWing:
     
     def flap_line(self, span_x:float)->float:
         return -0.2*span_x+120
-     
+    
+    def leading_edge(self):
+        return self._ellipse_quadrant(self.half_span, self.wing_axis_from_leading_edge(), num_points=50) * np.array([1,-1])
+    
+    def trailing_edge(self):
+        return self._ellipse_quadrant(self.half_span, self.root_chord_centerline()-self.wing_axis_from_leading_edge(), num_points=50)
+    
     def plot(self, section_positions:list[float]|None=None):
-        leading_edge  = self._ellipse_quadrant(self.half_span, self.wing_axis_from_leading_edge(), num_points=50) * np.array([1,-1])
-        trailing_edge = self._ellipse_quadrant(self.half_span, self.root_chord_centerline()-self.wing_axis_from_leading_edge(), num_points=50)
+        leading_edge  = self.leading_edge()
+        trailing_edge = self.trailing_edge()
         
         spar_y_position = -self.wing_axis_from_leading_edge() + self.front_spar_from_leading_edge()
         
@@ -71,11 +77,7 @@ class SpitfireWing:
         return self.root_chord_centerline() * np.sqrt(1 - 4 * (span_x / (self.half_span * 2))**2)
     
     def local_chord_setback(self, span_x: float):
-        leading_edge = self._ellipse_quadrant(
-            self.half_span, 
-            self.wing_axis_from_leading_edge(), 
-            num_points=50
-        )
+        leading_edge = self.leading_edge() * np.array([1,-1])
         return np.interp(span_x, *leading_edge[::-1].transpose())
     
     def local_thickness(self, span_x):

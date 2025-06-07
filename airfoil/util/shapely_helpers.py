@@ -1,31 +1,328 @@
 from pathlib import Path
-from shapely.geometry.base import BaseGeometry
 
-from ..airfoil._itertools import split_indexable, sliding_window
 import numpy as np
 
-def shapely_to_svg(shape:BaseGeometry, output:Path|str):
+from shapely.geometry.base import BaseGeometry
+from shapely.plotting import plot_line,plot_points,plot_polygon
+
+from matplotlib.axes import Axes
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+
+from .array_helpers import sliding_window, split_indexable
+
+
+def plot_shapely_simple(shps:list[BaseGeometry], ax:Axes|None=None):
+    
+    if ax is None:
+        f, ax = plt.subplots()
+    for shp in shps:
+        match shp.geom_type:
+            case "Point"|"MultiPoint":
+                plot_points(shp,ax)
+            case "Polygon" | "MultiPolygon":
+                plot_polygon(shp,ax)
+            case "Line" | "LineString" | "LinearRing":
+                plot_line(shp,ax)
+    ax.set_aspect("equal")
+
+
+def plot_shapely(shps: list[BaseGeometry], ax: Axes | None = None, legend: list[str] | None | bool = None):
+    """VIBE WARNING"""
+    if ax is None:
+        f, ax = plt.subplots()
+    
+    # Get matplotlib's default color cycle
+    prop_cycle = plt.rcParams['axes.prop_cycle']
+    colors = prop_cycle.by_key()['color']
+    
+    # Determine legend behavior
+    show_legend = True
+    if legend is False:
+        show_legend = False
+        legend_labels = []
+    elif legend is None:
+        legend_labels = [str(i) for i in range(len(shps))]
+    else:
+        legend_labels = legend
+    
+    # Track handles and labels for legend
+    handles = []
+    labels = []
+    
+    for i, shp in enumerate(shps):
+        color = colors[i % len(colors)]  # Cycle through colors if more shapes than colors
+        label = legend_labels[i] if i < len(legend_labels) else str(i)
+        
+        # Count existing artists before adding new ones
+        existing_lines = len(ax.lines)
+        existing_patches = len(ax.patches)
+        existing_collections = len(ax.collections)
+        
+        match shp.geom_type:
+            case "Point" | "MultiPoint":
+                handle = plot_points(shp, ax, markersize=3, label=label)
+                if handle and show_legend:
+                    handles.append(handle)
+                    labels.append(label)
+                    
+            case "Polygon" | "MultiPolygon":
+                handle = plot_polygon(shp, ax, facecolor=color, alpha=0.7, edgecolor='black', linewidth=1, label=label)
+                if handle and show_legend:
+                    handles.append(handle)
+                    labels.append(label)
+                    
+            case "Line" | "LineString" | "LinearRing":
+                handle = plot_line(shp, ax, color=color, linewidth=2, label=label)
+                if handle and show_legend:
+                    handles.append(handle)
+                    labels.append(label)
+        
+        # Now capture any new markers that were added and color them
+        # Check for new line objects (which may contain markers)
+        for line in ax.lines[existing_lines:]:
+            if line.get_marker() != 'None':  # Line has markers
+                line.set_markerfacecolor(color)
+                line.set_markeredgecolor(color)
+                line.set_markersize(3)
+        
+        # Check for new collections (scatter plots, etc.)
+        for collection in ax.collections[existing_collections:]:
+            # This handles PathCollection objects (from scatter plots)
+            if hasattr(collection, 'set_facecolors'):
+                collection.set_facecolors([color])
+            if hasattr(collection, 'set_edgecolors'):
+                collection.set_edgecolors([color])
+            if hasattr(collection, 'set_sizes'):
+                collection.set_sizes([9])  # markersize=3 corresponds to size=9 (3^2)
+    
+    ax.set_aspect("equal")
+    
+    # Add legend if we have handles and legend is enabled
+    if handles and show_legend:
+        ax.legend(handles, labels)
+    
+    return ax
+
+def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, legend: list[str] | None | bool = None, arrow_spacing: int = 10):
+    
+    if ax is None:
+        f, ax = plt.subplots()
+    
+    # Get matplotlib's default color cycle
+    prop_cycle = plt.rcParams['axes.prop_cycle']
+    colors = prop_cycle.by_key()['color']
+    
+    # Determine legend behavior
+    show_legend = True
+    if legend is False:
+        show_legend = False
+        legend_labels = []
+    elif legend is None:
+        legend_labels = [str(i) for i in range(len(shps))]
+    else:
+        legend_labels = legend
+    
+    # Track handles and labels for legend
+    handles = []
+    labels = []
+    
+    def get_direction_angle(p1, p2):
+        """Calculate angle in radians for direction from p1 to p2"""
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        return np.arctan2(dy, dx)
+    
+    def plot_directional_markers(coords, color, part_label=""):
+        """Plot directional markers along a coordinate sequence"""
+        coords = list(coords)
+        if len(coords) < 2:
+            return
+        
+        # End marker (empty circle)
+        end_x, end_y = coords[-1]
+        end_circle = patches.Circle((end_x, end_y), radius=4.5, facecolor='white', 
+                                  edgecolor=color, linewidth=2, zorder=8)
+        ax.add_patch(end_circle)
+        
+        
+        # Start marker (play symbol - right-pointing triangle)
+        start_x, start_y = coords[0]
+        start_triangle = patches.RegularPolygon((start_x, start_y), 6, radius=2.5, 
+                                              orientation=0, facecolor=color, 
+                                              edgecolor='black', linewidth=1, zorder=100)
+        ax.add_patch(start_triangle)
+        
+        
+        
+        # Directional arrows along the path
+        arrow_count = 0
+        for i in range(1, len(coords) - 1, arrow_spacing):
+            if i >= len(coords):
+                break
+            
+            # Get direction from previous to next point
+            prev_pt = coords[i-1]
+            curr_pt = coords[i]
+            next_pt = coords[i+1] if i+1 < len(coords) else coords[i]
+            
+            # Calculate direction angle
+            angle = get_direction_angle(prev_pt, next_pt)
+            
+            # Create chevron/caret arrow
+            x, y = curr_pt
+            arrow = patches.RegularPolygon((x, y), 3, radius=8, 
+                                        orientation=angle + np.pi/2, 
+                                        facecolor=color, edgecolor=color, 
+                                        linewidth=0.5, zorder=10)
+            ax.add_patch(arrow)
+            arrow_count += 1
+        
+        # Add part label if provided
+        if part_label:
+            mid_idx = 0#len(coords) // 2
+            mid_x, mid_y = coords[mid_idx]
+            ax.annotate(
+                part_label,
+                xy=(mid_x,mid_y),
+                xytext=(10,5),
+                textcoords='offset points',
+                fontsize=10,
+                fontweight='bold',
+                ha='center',
+                va='center',
+
+                bbox=dict(
+                    boxstyle='round,pad=0.3',
+                    facecolor='white',
+                    edgecolor=color,
+                    alpha=0.8
+                ),
+                zorder=11
+            )
+    
+    for i, shp in enumerate(shps):
+        color = colors[i % len(colors)]
+        label = legend_labels[i] if i < len(legend_labels) else str(i)
+        
+        # Count existing artists before adding new ones (for marker fixing)
+        existing_lines = len(ax.lines)
+        existing_patches = len(ax.patches)
+        existing_collections = len(ax.collections)
+        
+        match shp.geom_type:
+            case "LineString" | "LinearRing":
+                # Plot the line first
+                handle = plot_line(shp, ax, color=color, linewidth=2, label=label)
+                plot_directional_markers(shp.coords, color)
+                
+                if handle and show_legend:
+                    handles.append(handle)
+                    labels.append(label)
+            
+            case "Polygon":
+                # Plot the polygon first
+                handle = plot_polygon(shp, ax, facecolor=color, alpha=0.3, 
+                                    edgecolor=color, linewidth=2, label=label)
+                
+                # Plot exterior boundary with direction
+                plot_directional_markers(shp.exterior.coords, color)
+                
+                # Plot interior boundaries (holes) with part labels
+                for j, interior in enumerate(shp.interiors):
+                    plot_directional_markers(interior.coords, color, f"H{j}")
+                
+                if handle and show_legend:
+                    handles.append(handle)
+                    labels.append(label)
+            
+            case "MultiLineString":
+                # Plot all parts with same color but label each part
+                for j, line in enumerate(shp.geoms):
+                    if j == 0:
+                        handle = plot_line(line, ax, color=color, linewidth=2, label=label)
+                        if handle and show_legend:
+                            handles.append(handle)
+                            labels.append(label)
+                    else:
+                        plot_line(line, ax, color=color, linewidth=2)
+                    
+                    plot_directional_markers(line.coords, color, str(j))
+            
+            case "MultiPolygon":
+                # Plot all parts with same color but label each part
+                for j, poly in enumerate(shp.geoms):
+                    if j == 0:
+                        handle = plot_polygon(poly, ax, facecolor=color, alpha=0.3, 
+                                            edgecolor=color, linewidth=2, label=label)
+                        if handle and show_legend:
+                            handles.append(handle)
+                            labels.append(label)
+                    else:
+                        plot_polygon(poly, ax, facecolor=color, alpha=0.3, 
+                                   edgecolor=color, linewidth=2)
+                    
+                    # Plot exterior with part label
+                    plot_directional_markers(poly.exterior.coords, color, str(j))
+                    
+                    # Plot interior boundaries (holes) with part labels
+                    for k, interior in enumerate(poly.interiors):
+                        plot_directional_markers(interior.coords, color, f"{j}H{k}")
+            
+            case "Point":
+                # Simple point plotting
+                x, y = shp.x, shp.y
+                ax.plot(x, y, 'o', color=color, markersize=6, label=label)
+                if show_legend:
+                    handles.append(plt.Line2D([0], [0], marker='o', color=color, 
+                                            linestyle='', markersize=6))
+                    labels.append(label)
+            
+            case "MultiPoint":
+                # Plot points with index numbers
+                for j, point in enumerate(shp.geoms):
+                    x, y = point.x, point.y
+                    if j == 0:
+                        line_handle = ax.plot(x, y, 'o', color=color, markersize=6, label=label)[0]
+                        if show_legend:
+                            handles.append(line_handle)
+                            labels.append(label)
+                    else:
+                        ax.plot(x, y, 'o', color=color, markersize=6)
+                    
+                    # Add index number next to point
+                    ax.text(x + 1, y + 1, str(j), fontsize=8, fontweight='bold',
+                           ha='left', va='bottom', bbox=dict(boxstyle='round,pad=0.2',
+                           facecolor='white', edgecolor=color, alpha=0.8))
+        
+        # Fix any markers that were added by Shapely's plotting functions
+        for line in ax.lines[existing_lines:]:
+            if line.get_marker() != 'None':  # Line has markers
+                line.set_markerfacecolor(color)
+                line.set_markeredgecolor(color)
+                line.set_markersize(2)
+        
+        # Fix collections (scatter plots, etc.)
+        for collection in ax.collections[existing_collections:]:
+            if hasattr(collection, 'set_facecolors'):
+                collection.set_facecolors([color])
+            if hasattr(collection, 'set_edgecolors'):
+                collection.set_edgecolors([color])
+            if hasattr(collection, 'set_sizes'):
+                collection.set_sizes([9])  # markersize=3 corresponds to size=9 (3^2)
+    
+    ax.set_aspect("equal")
+    
+    # Add legend if we have handles and legend is enabled
+    if handles and show_legend:
+        ax.legend(handles, labels)
+    
+    return ax
+
+def shapely_to_svg(shapes:list[BaseGeometry], output:Path|str):
     output_path = Path(output)
-    output_path.write_text(
-    f"""<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink= "http://www.w3.org/1999/xlink">
-    {shape.svg()}
-    </svg>
-    """)
-
-def split_linestring_by_angle(arr:np.ndarray, split_angle_deg:float=70)->list[np.ndarray]:
-    arr_length, arr_dimentions = arr.shape
-    assert arr_length>1
-    assert arr_dimentions ==2
-    angles = []
-    lengths = []
-    for [a,b,c] in sliding_window(arr, 3):
-        ba = (a-b)/np.linalg.norm(a-b)
-        cb = (b-c)/np.linalg.norm(b-c)
-        lengths.append(np.linalg.norm(a-b))
-        angles.append(np.acos(np.dot(ba, cb)))
-
-    chunks = split_indexable(
-        arr,
-        np.where(abs(np.array(angles))>np.deg2rad(split_angle_deg))[0]+1
-    )
-    return chunks
+    output_path.write_text("\n".join([
+        f"""<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink= "http://www.w3.org/1999/xlink">""",
+        f"""    {'\n'.join(shape.svg() for shape in shapes)}""",
+        f"""</svg>"""
+    ]))

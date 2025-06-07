@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal
-from warnings import deprecated, warn
+from warnings import warn
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -14,21 +14,12 @@ from shapely import LineString, Polygon, is_ccw, Point, delaunay_triangles, inte
 from shapely import geometry
 from shapely import difference, unary_union
 
-
 import pyvista as pv
 
-from ._naca4 import naca4
-from ._naca5 import naca5
-from ._naca_parse import naca
-from ._util import (
-    create_ruled_surface,
-    shapely_to_svg,
-    split_linestring_by_angle,
-    remove_sequential_duplicates,
-    ensure_closed,
-    linear_interpolation,
-)
-
+from .naca import naca, naca4, naca5
+from .util.array_helpers import remove_sequential_duplicates
+from .util.linestring_helpers import split_linestring_by_angle, ensure_closed, linear_interpolation
+from .util.pyvista_helpers import create_ruled_surface
 
 @dataclass
 class Decomposer:
@@ -134,9 +125,6 @@ class Decomposer:
             return False
         
         return True
-
-    
-        
 
 @dataclass
 class Hole:
@@ -335,9 +323,6 @@ class Airfoil:
         ax.set_aspect("equal")
         return ax
     
-    def to_svg(self):
-        return shapely_to_svg(LineString(self.points))
-    
     def to_mesh(
             self,
             decomposer:Decomposer|None = None
@@ -430,11 +415,7 @@ class WingSegment:
             self.length/2,
             axis=1
         )
-        
-        # edgea = pv.PolyData(a_3d)
-        # edgeb = pv.PolyData(b_3d)
-        # mesha = edgea.delaunay_2d(edge_source=edgea)
-        # meshb = edgeb.delaunay_2d(edge_source=edgeb)
+
         lengths = [len(item) for item in ad]
         mesha = self.left.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate((-self.length/2,0,0))
         meshb = self.right.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate(( self.length/2,0,0))
@@ -444,5 +425,3 @@ class WingSegment:
         mesh_target = mesh_target.compute_normals(auto_orient_normals=True)
         #assert mesh_target.is_manifold
         return mesh_target
-
-

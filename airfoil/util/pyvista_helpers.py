@@ -18,7 +18,5 @@ def create_ruled_surface(curve_a, curve_b):
         faces.extend([4, p1, p2, p3, p4])
     
     mesh = pv.PolyData(points, faces)
-    
-   
-    
+
     return mesh

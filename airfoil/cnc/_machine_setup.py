@@ -5,18 +5,17 @@ from numpy.typing import ArrayLike
 
 import pyvista as pv
 
-from .util.pyvista_mock import axis
-from .util.pyvista_helpers import create_ruled_surface
-from .util.path_planning import (
-    blur1d,
-    map_to_range,
+from airfoil.util.array_helpers import blur1d, map_to_range, remove_sequential_duplicates
+
+from .cnc_machine_mesh import axis
+from ..util.pyvista_helpers import create_ruled_surface
+from ..util.path_planning import (
     project_line_to_plane,
     ensure_closed,
-    deflection_angle,
 )
-from airfoil._util import remove_sequential_duplicates, linear_resampling_to_length
+from airfoil.util.linestring_helpers import deflection_angle_padded, linear_resampling_to_length
 from dataclasses import dataclass, replace, field
-from .airfoil import WingSegment, Decomposer
+from .._airfoil import WingSegment, Decomposer
 
 @dataclass
 class MachineSetup:
@@ -133,8 +132,8 @@ class MachineSetup:
         speed = map_to_range(
             blur1d(
                 np.max([
-                    deflection_angle(a), # error on NAN
-                    deflection_angle(b),
+                    deflection_angle_padded(a), # error on NAN
+                    deflection_angle_padded(b),
                 ],axis=0),
                 count=31,
                 std=6
@@ -194,7 +193,7 @@ class MachineSetup:
             )
             from pathlib import Path
             
-            folder = Path("./records/")
+            folder = Path("./data/records/")
             folder.mkdir(exist_ok=True)
             file = folder / f"{pd.Timestamp.now():%Y-%m-%d %H%M} {record_name}.txt"
             file.write_text(rec)
