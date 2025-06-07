@@ -104,6 +104,16 @@ def plot_shapely(shps: list[BaseGeometry], ax: Axes | None = None, legend: list[
     
     return ax
 
+
+def shapely_to_svg(shapes:list[BaseGeometry], output:Path|str):
+    output_path = Path(output)
+    output_path.write_text("\n".join([
+        f"""<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink= "http://www.w3.org/1999/xlink">""",
+        f"""    {'\n'.join(shape.svg() for shape in shapes)}""",
+        f"""</svg>"""
+    ]))
+
+
 def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, legend: list[str] | None | bool = None, arrow_spacing: int = 10):
     
     if ax is None:
@@ -310,11 +320,3 @@ def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, l
         ax.legend(handles, labels, bbox_to_anchor=(1.05, 0.5), loc='center left')
     
     return ax
-
-def shapely_to_svg(shapes:list[BaseGeometry], output:Path|str):
-    output_path = Path(output)
-    output_path.write_text("\n".join([
-        f"""<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink= "http://www.w3.org/1999/xlink">""",
-        f"""    {'\n'.join(shape.svg() for shape in shapes)}""",
-        f"""</svg>"""
-    ]))
