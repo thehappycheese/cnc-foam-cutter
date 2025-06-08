@@ -3,13 +3,10 @@ from pathlib import Path
 import numpy as np
 
 from shapely.geometry.base import BaseGeometry
-from shapely.plotting import plot_line,plot_points,plot_polygon
+from shapely.plotting import plot_line,plot_points, plot_polygon
 
 from matplotlib.axes import Axes
-import matplotlib.patches as patches
 import matplotlib.pyplot as plt
-
-from .array_helpers import sliding_window, split_indexable
 
 
 def plot_shapely_simple(shps:list[BaseGeometry], ax:Axes|None=None):

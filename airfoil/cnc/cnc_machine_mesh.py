@@ -1,6 +1,8 @@
 import pyvista as pv
 from typing import Literal
 
+from ._state_helpers import state_to_3d_points
+
 
 def carriage():
     noz = pv.Cone(
@@ -72,3 +74,27 @@ def axis(position=(0,0,0),side:Literal["L","R"]="L",size=(500,500),bottom_limit=
         -bottom_limit[1],
     ))
     return res
+
+def draw_machine(x:float, y:float, z:float, a:float, spacing=220, pt:pv.Plotter|None=None, opacity:float=1.0):
+    bottom_limit = (100,100)
+    axa = axis(
+        position=(-spacing/2,x,y),
+        side="L",
+        bottom_limit=bottom_limit,
+    )
+    axb = axis(
+        position=(spacing/2,z,a),
+        side="R",
+        bottom_limit=bottom_limit,
+    )
+    if pt is None:
+        pt = pv.Plotter()
+    pt.add_mesh(axa,color="white", opacity=opacity)
+    pt.add_mesh(axb,color="white", opacity=opacity)
+    pt.add_mesh(pv.Line(*state_to_3d_points(x,y,z,a,spacing=spacing)),color="red")
+    pt.camera_position = [
+        (+spacing/2,-1000,300),
+        (0,150,80),
+        (0,0,1)
+    ]
+    return pt

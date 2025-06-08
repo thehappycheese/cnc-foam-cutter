@@ -1,5 +1,6 @@
 import numpy as np
 import pyvista as pv
+import shapely as sh
 
 def create_ruled_surface(curve_a, curve_b):
     n_points = curve_a.shape[0]
@@ -20,3 +21,14 @@ def create_ruled_surface(curve_a, curve_b):
     mesh = pv.PolyData(points, faces)
 
     return mesh
+
+def mesh_from_polygon(polygon:sh.Polygon):
+    pol = sh.Polygon(polygon)
+    triangles = sh.constrained_delaunay_triangles(pol)
+    return pv.merge([
+        pv.PolyData(
+            np.insert(coords:=geom.exterior.coords[:-1],0, 0,-1),
+            faces=[[len(coords), *range(len(coords))]]
+        )
+        for geom in triangles.geoms
+    ])

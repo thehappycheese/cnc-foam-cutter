@@ -5,6 +5,13 @@ from shapely import Polygon
 
 from airfoil.util.array_helpers import remove_sequential_duplicates, sliding_window, split_indexable
 
+def is_ccw(points:np.ndarray)->bool:
+    """same as shapely's function but works on numpy coordinates in shape (n,2)
+    
+    This assumes the same kind of coordinate system as shapely, where positive x points to the right, and y points up.
+    """
+    x,y=points.transpose()
+    return np.array(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1))) < 0
 
 def ensure_closed(values:np.ndarray):
     if np.equal(values[0],values[-1]).all():
@@ -136,9 +143,6 @@ def deflection_angle_padded(path:np.ndarray):
         mode='edge'
     )
 
-
-# TODO: the at_index version of this function belongs to the array helpers.
-
 def split_and_roll(
     linear_ring:np.ndarray,
     at_index:int,
@@ -151,35 +155,139 @@ def split_and_roll(
         )[::-1]
     ))
 
-
 def split_and_roll_at_top_right(
-        linear_ring:np.ndarray,
-        at_index:int|None=None,
+        linear_ring:np.ndarray
     ) -> np.ndarray:
-    
-    if at_index is None:
-        lsb = np.array(linear_ring)[:-1]
-        top_right_point_index = (lsb[:,0]+lsb[:,1]).argmax()
-    else:
-        top_right_point_index = at_index
-    lsb = np.roll(lsb,-top_right_point_index-1, axis=0)[::-1]
-    if ensure_is_closed:
-        lsb=ensure_closed(lsb)
-    return remove_sequential_duplicates(lsb)
+    linear_ring = np.asarray(linear_ring)
+    return remove_sequential_duplicates(
+        ensure_closed(
+            split_and_roll(
+                linear_ring,
+                at_index=(linear_ring[:,0]+  linear_ring[:,1]).argmax() # top right
+            )
+        )
+    )
 
 
-# TODO: the at_index version of this function belongs to the array helpers.
-def split_and_roll_at_top_right_old(
-        polygon:Polygon,
-        at_index:int|None=None,
-    ) -> np.ndarray:
+def _make_segment_resampler_to_length(max_segment_length:float, core_resampler:Callable[[np.ndarray, Callable[[float],int]],np.ndarray]=resample_spline_fallback_linear) -> Callable[[list[np.ndarray]], list[np.ndarray]]:
+    """set core_resampler=resample_linear to skip trying spline interpolation"""
+    return lambda segments: [
+        core_resampler(
+            segment,
+            lambda total_lenght: int(np.ceil(total_lenght/max_segment_length))
+        )
+        for segment
+        in segments
+    ]
+
+def _make_segment_resampler_to_counts(counts:list[int], core_resampler:Callable[[np.ndarray, Callable[[float],int]],np.ndarray]=resample_spline_fallback_linear) -> Callable[[list[np.ndarray]], list[np.ndarray]]:
+    """set core_resampler=resample_linear to skip trying spline interpolation"""
+    return lambda segments: [
+        core_resampler(
+            segment,
+            lambda _: count
+        )
+        for segment,count
+        in zip(segments,counts)
+    ]
+
+def _first_point_index_selector_top_right(points:np.ndarray) -> int:
+    return int(np.argmax(points[:,0]+points[:,1]))
+
+def _resample_shape(
+    shape:np.ndarray,
+    segment_resampler:Callable[[list[np.ndarray]], list[np.ndarray]] = _make_segment_resampler_to_length(1.0),
+    first_point_selector:Callable[[np.ndarray], int]                 = _first_point_index_selector_top_right,
+    deflection_angle_split_deg:float=30,
+):
+    """
+    use resample_shapes instead
+    Resegments a shape
+    `segment_resampler=make_segment_resampler_to_counts([len(seg) for seg in seg])` to make it so that the resulting shape has segment lengths matching some existing shape"""
+
+    if not is_ccw(shape):
+        shape = shape[::-1] # reversed
+
+    # reset the starting position of the linestring
+    shape = split_and_roll(shape, at_index=first_point_selector(shape))
+
+    split_at_corners = split_indexable(
+        shape,
+        np.where(deflection_angle(shape)>np.deg2rad(deflection_angle_split_deg))[0]+1
+    )
+
+    resampled = segment_resampler(split_at_corners)
+
+    result = remove_sequential_duplicates(ensure_closed(np.concat(resampled)))
     
-    if at_index is None:
-        lsb = np.array(polygon.boundary.coords)[:-1]
-        top_right_point_index = (lsb[:,0]+lsb[:,1]).argmax()
-    else:
-        top_right_point_index = at_index
-    lsb = np.roll(lsb,-top_right_point_index-1, axis=0)[::-1]
-    if ensure_is_closed:
-        lsb=ensure_closed(lsb)
-    return remove_sequential_duplicates(lsb)
+
+    return result, [len(segment) for segment in resampled]
+
+def resample_shapes(
+    shapes:list[np.ndarray],
+    target_length:float=1.0,
+    first_point_selector:Callable[[np.ndarray], int]                        = _first_point_index_selector_top_right,
+    deflection_angle_split_deg:float                                        = 30,
+    core_resampler:Callable[[np.ndarray, Callable[[float],int]],np.ndarray] = resample_spline_fallback_linear,
+):
+    """
+    Re-sample multiple shapes to have consistent segmentation on each 'side' of the shape.
+
+    1. Initially splits up shapes into linestrings at 'corners' where the linestring turns by more than `deflection_angle_split_deg`
+    1. LineStrings for the first `shapes` are resampled to meet the desired `target_length` segmentation
+    1. LineStrings for all subsequent `shapes` are then resampled to match the count of the first shapes segmentation.
+    1. Finally LineStrings for each `shapes` are stitched back together again and a list of the resegmented shapes are returned in the same order as the input shapes.
+
+    ### Parameters
+    
+    - `shapes` List of closed 2D shapes as (N, 2) arrays, e.g. [airfoil1, airfoil2]
+    - `target_length` Max segment length for first shape, e.g. 1.0
+    - `first_point_selector` function that accepts a shape and returns an index to use as the new starting point for the shape outlines. The default fucntion chooses the upper-rightmost point.
+    - `deflection_angle_split_deg` Corner split threshold in degrees, e.g. 30
+    - `core_resampler` Interpolation method. The default is `resample_spline_fallback_linear` but you may wish to replace this with `resample_linear` if the default misbehaves and causes unexplected spliney shapes.
+
+    ### Returns
+    
+    Resampled shapes with matching segment counts
+
+    ### Examples
+    
+    ```python
+    a=np.array([
+        [0,0],
+        [5,0],
+        [5,10],
+        [0,10]
+    ])
+
+    b=np.array([
+        [0,0],
+        [5,0],
+        [10,10],
+        [3,5]
+    ])
+    shape_a, shape_b = resample_shapes(
+        [a,b],
+        deflection_angle_split_deg=20
+    )
+    ```
+
+    > note that in the example above `deflection_angle_split_deg` is adjusted from its default value
+    > as there is a shallow angle in `b`
+    """
+    shape0, counts = _resample_shape(
+        shapes[0],
+        segment_resampler          = _make_segment_resampler_to_length(target_length, core_resampler=core_resampler),
+        first_point_selector       = first_point_selector,
+        deflection_angle_split_deg = deflection_angle_split_deg,
+    )
+    resampler = _make_segment_resampler_to_counts(counts, core_resampler=core_resampler)
+    results = [shape0]
+    for shape in shapes[1:]:
+        result, _ = _resample_shape(
+            shape,
+            segment_resampler=resampler,
+            deflection_angle_split_deg=deflection_angle_split_deg
+        )
+        results.append(result)
+    return results
