@@ -7,7 +7,7 @@ from airfoil.util.array_helpers import remove_sequential_duplicates, sliding_win
 
 
 def ensure_closed(values:np.ndarray):
-    if np.equal(values[0],values[1]).all():
+    if np.equal(values[0],values[-1]).all():
         return values
     else:
         return np.concat([values,[values[0]]])
@@ -136,11 +136,42 @@ def deflection_angle_padded(path:np.ndarray):
         mode='edge'
     )
 
+
 # TODO: the at_index version of this function belongs to the array helpers.
+
+def split_and_roll(
+    linear_ring:np.ndarray,
+    at_index:int,
+) -> np.ndarray:
+    return remove_sequential_duplicates(ensure_closed(
+        np.roll(
+            linear_ring,
+            -at_index-1,
+            axis=0
+        )[::-1]
+    ))
+
+
 def split_and_roll_at_top_right(
+        linear_ring:np.ndarray,
+        at_index:int|None=None,
+    ) -> np.ndarray:
+    
+    if at_index is None:
+        lsb = np.array(linear_ring)[:-1]
+        top_right_point_index = (lsb[:,0]+lsb[:,1]).argmax()
+    else:
+        top_right_point_index = at_index
+    lsb = np.roll(lsb,-top_right_point_index-1, axis=0)[::-1]
+    if ensure_is_closed:
+        lsb=ensure_closed(lsb)
+    return remove_sequential_duplicates(lsb)
+
+
+# TODO: the at_index version of this function belongs to the array helpers.
+def split_and_roll_at_top_right_old(
         polygon:Polygon,
         at_index:int|None=None,
-        ensure_is_closed:bool=True
     ) -> np.ndarray:
     
     if at_index is None:
