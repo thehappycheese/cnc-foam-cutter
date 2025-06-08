@@ -10,7 +10,7 @@ from scipy.interpolate import make_splprep
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
-from shapely import LineString, Polygon, is_ccw, Point, delaunay_triangles, intersection
+from shapely import LineString, Polygon, is_ccw, Point, constrained_delaunay_triangles, intersection
 from shapely import geometry
 from shapely import difference, unary_union
 
@@ -332,7 +332,7 @@ class Airfoil:
         chunks = decomposer.decompose(self)
         s =  ensure_closed(remove_sequential_duplicates(np.concat(chunks)))
         pol = Polygon(s)
-        triangles = delaunay_triangles(pol)
+        triangles = constrained_delaunay_triangles(pol)
         # Collect all vertices and faces
         all_vertices = []
         all_faces = []
