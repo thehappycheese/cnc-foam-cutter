@@ -114,11 +114,18 @@ def shapely_to_svg(shapes:list[BaseGeometry], output:Path|str):
     ]))
 
 
-def plot_shapely_directional(shps: list[BaseGeometry], ax: Axes | None = None, legend: list[str] | None | bool = None, arrow_spacing: int = 10):
+def plot_shapely_directional(
+        shps: list[BaseGeometry],
+        ax: Axes | None = None,
+        legend: list[str] | None | bool = None,
+        arrow_spacing: int = 10,
+        title:str|None = None,
+    ):
     
     if ax is None:
         f, ax = plt.subplots()
-    
+    if title is not None:
+        ax.set_title(title)
     # Get matplotlib's default color cycle
     prop_cycle = plt.rcParams['axes.prop_cycle']
     colors = prop_cycle.by_key()['color']
