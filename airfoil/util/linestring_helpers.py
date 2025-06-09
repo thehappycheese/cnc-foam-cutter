@@ -1,7 +1,5 @@
-from warnings import deprecated
 from typing import Callable
 import numpy as np
-from shapely import Polygon
 
 from airfoil.util.array_helpers import remove_sequential_duplicates, sliding_window, split_indexable
 

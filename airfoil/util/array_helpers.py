@@ -24,7 +24,7 @@ def split_indexable[T](arr:Sequence[T],indicies:list[int]) -> list[Sequence[T]]:
     return result
 
 
-def remove_sequential_duplicates(arr):
+def remove_sequential_duplicates[T](arr:Sequence[T]) -> Sequence[T]:
     last = arr[0]
     result = [last]
     for item in arr[1:]:
@@ -34,8 +34,8 @@ def remove_sequential_duplicates(arr):
     return np.array(result)
 
 
-def blur1d(values, count=31, std=6):
-    blur_kernel = gaussian(count,std)
+def blur1d(values, count:int=31, std:int=6):
+    blur_kernel = gaussian(count, std)
     blur_kernel /= blur_kernel.sum()
     return ndimage.convolve1d(values,blur_kernel)
 

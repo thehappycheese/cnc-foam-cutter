@@ -1,3 +1,4 @@
+from itertools import pairwise
 import numpy as np
 from dataclasses import dataclass
 from airfoil._airfoil import Airfoil, WingSegment, Hole, Hinge
@@ -112,14 +113,17 @@ class SpitfireWing:
         )
         return af
     
-    def create_airfoils(self, section_positions: list[float])->list[Airfoil]:
+    def create_airfoils(self, section_positions: list[float|int])->list[Airfoil]:
         results = []
         for section_position in section_positions:
             results.append(self.local_airfoil(section_position))
         return results
     
     def create_segments(
-            self,
-            section_positions:list[float],
-        )->WingSegment:
-        pass
+        self,
+        section_positions:list[float|int],
+    )->list[WingSegment]:
+        segments = []
+        for (posa,a), (posb, b) in pairwise(zip(section_positions, self.create_airfoils(section_positions=section_positions))):
+            segments.append(WingSegment(a,b,posb-posa))
+        return segments
