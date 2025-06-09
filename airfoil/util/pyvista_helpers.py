@@ -22,7 +22,10 @@ def create_ruled_surface(curve_a, curve_b):
 
     return mesh
 
-def mesh_from_polygon(polygon:sh.Polygon):
+def mesh_from_polygon(polygon:sh.Polygon|np.ndarray):
+    """Uses shapely's superior constrained_delaunay_triangles instead of pyvista's delaunay.
+    Therefore the input has to be a shapely polygon or a (n,2) numpy array of xy points.
+    The output will be a pyvista mesh."""
     pol = sh.Polygon(polygon)
     triangles = sh.constrained_delaunay_triangles(pol)
     return pv.merge([
@@ -32,3 +35,18 @@ def mesh_from_polygon(polygon:sh.Polygon):
         )
         for geom in triangles.geoms
     ])
+
+def make_mesh_from_side_surfaces(a:np.ndarray, b:np.ndarray, width:float=150):
+    """uses related function `create_rules_surface` and `mesh_from_polygon`
+    to create manifold lofted mesh from two 2D profiles that will be placed at ±width/2 from the yz plane.
+    a and b should be line strings as nympy (n,2) arrays"""
+    shapea3d = np.insert(a, 0, -width/2, axis=-1)
+    shapeb3d = np.insert(b, 0,  width/2, axis=-1)
+
+    aa = mesh_from_polygon(sh.Polygon(a)).translate((-width/2,0,0))
+    bb = mesh_from_polygon(sh.Polygon(b)).translate(( width/2,0,0))
+    aabb = create_ruled_surface(shapea3d, shapeb3d)
+
+    result =  pv.merge([aa,bb,aabb])
+    assert result.is_manifold
+    return result
