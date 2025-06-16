@@ -1,130 +1,23 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal
-from warnings import warn, deprecated
 
 import numpy as np
 from numpy.typing import ArrayLike
 
-from scipy.interpolate import make_splprep
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
-from shapely import LineString, Polygon, is_ccw, Point, constrained_delaunay_triangles, intersection
-from shapely import geometry
-from shapely import difference, unary_union
+from shapely import LineString, Polygon, is_ccw, constrained_delaunay_triangles, intersection
 
 import pyvista as pv
 
+
 from .naca import naca, naca4, naca5
 from .util.array_helpers import remove_sequential_duplicates
-from .util.linestring_helpers import split_linestring_by_angle, ensure_closed, resample_linear_to_number_of_segments
-from .util.pyvista_helpers import create_ruled_surface
+from .util.linestring_helpers import ensure_closed
 
-@dataclass
-class Decomposer:
-    upcut_kerf            :float=0.01
-    buffer                :float=0
-    tolerance             :float=0.05
-    split_angle_deg       :float=30
-    segment_target_length :float=1.0
-    _length_counts        :list[int]|None = None
-
-    def decompose_many(self, airfoils:list[Airfoil]):
-        result = []
-        for airfoil in airfoils:
-            result.append(self.decompose(airfoil))
-        return result
-
-    def decompose(self, airfoil:Airfoil):
-
-        if any(hole.diameter_mm/2-self.buffer<self.buffer/2 for hole in airfoil.holes):
-            warn(f"some holes will be buffered down to minimum size of the buffer/2={self.buffer/2}mm")
-
-        shape_holes = [
-            Point(hole.position)
-            .buffer(max(self.buffer/4, hole.diameter_mm/2-self.buffer))
-            for hole
-            in airfoil.holes
-        ]
-        height=airfoil.bounding_size()[1]*10
-        shape_upcuts = [
-            geometry.box(
-                *(hole.position+np.array([-self.upcut_kerf/2, 0])),
-                *(hole.position+np.array([ self.upcut_kerf  ,height]))
-            ) for hole in airfoil.holes
-        ]
-
-        shape_airfoil = airfoil.polygon().simplify(tolerance=self.tolerance)
-        shape_hinges = [] if airfoil.hinge is None else [airfoil.hinge.to_polygon()]
-        if self.buffer>0:
-            shape_airfoil = shape_airfoil.buffer(self.buffer,quad_segs=1, join_style="mitre")
-            shape_hinges = [hinge.buffer(-self.buffer,quad_segs=1,join_style="mitre") for hinge in shape_hinges]
-
-        lsb = difference(
-            airfoil.polygon().simplify(tolerance=self.tolerance).buffer(self.buffer),
-            unary_union(shape_holes+shape_upcuts+shape_hinges)
-        )
-        lsb = np.array(lsb.boundary.coords)
-        lsb = np.roll(lsb,-(lsb[:,0]+lsb[:,1]).argmax()-1, axis=0)[::-1]
-
-        lsb = remove_sequential_duplicates(lsb)
-
-        leading_edge_split = lsb[:,0].argmin()
-        lsbc_upper = lsb[:leading_edge_split+1]
-        lsbc_lower = lsb[leading_edge_split:]
-        upper_chunks = split_linestring_by_angle(lsbc_upper,split_angle_deg=self.split_angle_deg)
-        lower_chunks = split_linestring_by_angle(lsbc_lower,split_angle_deg=self.split_angle_deg)
-        chunks = upper_chunks+lower_chunks
-
-        if self._length_counts is None:
-            result = []
-            for chunk in chunks:
-                new_segment_count = int(np.ceil(np.linalg.norm(np.diff(chunk,axis=0),axis=1).sum()/self.segment_target_length))
-                if len(chunk)<=4:
-                    #linear
-                    result.append(resample_linear_to_number_of_segments(chunk, new_segment_count))
-                else:
-                    try:
-                        bspline, u = make_splprep(chunk.transpose())
-                        u_new = np.linspace(0, 1, new_segment_count)
-                        interped = bspline(u_new).transpose()
-                        assert self._is_valid_interpolation_result(interped)
-                    except:
-                        warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
-                        interped = resample_linear_to_number_of_segments(chunk, new_segment_count)
-                    result.append(interped)
-            self._length_counts = [len(chunk) for chunk in result]
-        else:
-            result = []
-            for new_segment_count, chunk in zip(self._length_counts, chunks):
-                if len(chunk)<=4:
-                    #linear
-                    result.append(resample_linear_to_number_of_segments(chunk, new_segment_count))
-                else:
-                    try:
-                        bspline, u = make_splprep(chunk.transpose())
-                        u_new = np.linspace(0, 1, new_segment_count)
-                        interped = bspline(u_new).transpose()
-                        assert self._is_valid_interpolation_result(interped)
-                    except:
-                        warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
-                        interped = resample_linear_to_number_of_segments(chunk, new_segment_count)
-                    result.append(interped)
-        return result
-
-    def _is_valid_interpolation_result(self, result):
-        """Check if interpolation result is valid"""
-        
-        # Check for NaN or infinite values
-        if not np.isfinite(result).all():
-            return False
-        
-        # Check if result has reasonable variance (not all points the same)
-        if np.allclose(result, result[0], atol=1e-10):
-            return False
-        
-        return True
+from ._Decomposer import Decomposer
 
 @dataclass
 class Hole:
@@ -289,6 +182,20 @@ class Airfoil:
                 rotation_deg = self.hinge.rotation_deg + rotation_deg
             ),
         )
+    
+    def with_scale(self, scale:ArrayLike) -> Airfoil:
+        scale = np.array(scale)
+        assert scale.shape==(2,), "Scale must be an ndarray of shape (2,)"
+        scale_reshaped = scale.reshape(-1,2)
+        return replace(
+            self,
+            points = self.points * scale_reshaped,
+            holes  = [replace(hole, position=hole.position*scale) for hole in self.holes],
+            hinge   = None if self.hinge is None else replace(
+                self.hinge,
+                upper_point = self.hinge.position * scale,
+            )
+        )
 
     def show(self):
         from IPython.display import display
@@ -360,68 +267,3 @@ class Airfoil:
     def bounding_center(self):
         return self.points.min(axis=1)+self.bounding_size()/2
     
-@dataclass
-class WingSegment:
-    left:Airfoil
-    right:Airfoil
-    length:float
-
-    def __repr__(self) -> str:
-        return f"<AirfoilPair length={self.length:.1f} left={self.left} right={self.right} />"
-
-    def with_translation(self, translation:ArrayLike) -> WingSegment:
-        return replace(
-            self,
-            left  = self.left .with_translation(translation),
-            right = self.right.with_translation(translation),
-        )
-    
-    def bounding_size(self):
-        allpoints = np.concat([self.left.points, self.right.points])
-        size = allpoints.max(axis=0)-allpoints.min(axis=0)
-        return np.array([*size, self.length])
-    
-    def bounding_center(self):
-        allpoints = np.concat([self.left.points, self.right.points])
-        return np.array([0, *(allpoints.min(axis=0)+(allpoints.max(axis=0)-allpoints.min(axis=0))/2)])
-
-    def decompose(
-        self,
-        decomposer:Decomposer|None=None
-    ):
-        if decomposer is None:
-            decomposer = Decomposer()
-        ad, bd = decomposer.decompose_many([self.left, self.right])
-        return ad, bd
-
-    def to_mesh(
-        self,
-        decomposer:Decomposer|None=None
-    ):
-        if decomposer is None:
-            decomposer = Decomposer()
-        
-        ad, bd = self.decompose(decomposer)
-
-        a_3d = np.insert(
-            ensure_closed(remove_sequential_duplicates(np.concat(ad))),
-            0,
-            -self.length/2,
-            axis=1
-        )
-        b_3d = np.insert(
-            ensure_closed(remove_sequential_duplicates(np.concat(bd))),
-            0,
-            self.length/2,
-            axis=1
-        )
-
-        lengths = [len(item) for item in ad]
-        mesha = self.left.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate((-self.length/2,0,0))
-        meshb = self.right.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate(( self.length/2,0,0))
-
-        meshc = create_ruled_surface(a_3d,b_3d)
-        mesh_target = (mesha + meshb + meshc).clean().fill_holes(hole_size=20)
-        mesh_target = mesh_target.compute_normals(auto_orient_normals=True)
-        #assert mesh_target.is_manifold
-        return mesh_target

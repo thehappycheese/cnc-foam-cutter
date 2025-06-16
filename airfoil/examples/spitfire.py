@@ -1,7 +1,7 @@
 from itertools import pairwise
 import numpy as np
 from dataclasses import dataclass
-from airfoil._airfoil import Airfoil, WingSegment, Hole, Hinge
+from airfoil import Airfoil, WingSegment
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 

@@ -5,6 +5,7 @@ from numpy.typing import ArrayLike
 
 import pyvista as pv
 
+from .._Decomposer import Decomposer
 from airfoil.util.array_helpers import blur1d, map_to_range, remove_sequential_duplicates
 
 from .cnc_machine_mesh import axis
@@ -15,7 +16,7 @@ from ..util.path_planning import (
 )
 from airfoil.util.linestring_helpers import deflection_angle_padded, resample_linear_to_segment_length
 from dataclasses import dataclass, replace, field
-from .._airfoil import WingSegment, Decomposer
+from .._WingSegment import WingSegment
 
 @dataclass
 class MachineSetup:

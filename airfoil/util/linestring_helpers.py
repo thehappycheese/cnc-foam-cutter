@@ -1,7 +1,12 @@
 from typing import Callable
 import numpy as np
+from scipy.interpolate import make_splprep
 
-from airfoil.util.array_helpers import remove_sequential_duplicates, sliding_window, split_indexable
+from airfoil.util.array_helpers import (
+    remove_sequential_duplicates,
+    sliding_window,
+    split_indexable
+)
 
 def is_ccw(points:np.ndarray)->bool:
     """same as shapely's function but works on numpy coordinates in shape (n,2)
@@ -62,8 +67,8 @@ def resample_long_segments(arr: np.ndarray, desired_length: float) -> np.ndarray
 def resample_spline_fallback_linear(
         chunk:np.ndarray,
         number_of_points_from_total_distance:Callable[[float], int],
-    ):
-    from scipy.interpolate import make_splprep
+    ) -> np.ndarray:
+    
     
     if len(chunk)<=4:
         return resample_linear(chunk, number_of_points_from_total_distance)
@@ -82,7 +87,7 @@ def resample_spline_fallback_linear(
 def resample_linear(
         line:np.ndarray,
         number_of_points_from_total_distance:Callable[[float], int]
-    ):
+    ) -> np.ndarray:
     """line is a numpy array of shape (n,d) where n is the number of points and d is the number of dimentions. d must be >=2
     points_from_total_distance is a function that takes the total length of the line and returns the number of points to resample the linestring into.
     """
