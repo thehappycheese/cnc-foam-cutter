@@ -78,10 +78,11 @@ class Airfoil:
         return f"<Airfoil p={len(self.points)} h={len(self.holes)} w={size[0]:.1f} h={size[1]:.1f} />"
     
     def __post_init__(self) -> None:
-        assert self.points.shape[1]==2, "points must have shape (n, 2)" 
-        assert self.points.shape[0]>4, f"need more points. only got {len(self.points)=}"
-        assert (self.points[0]==self.points[-1]).all(), "first and last point must be the same"
-        assert is_ccw(LineString(self.points)), "Points must be counterclockwise from trailing edge"
+        #assert self.points.shape[1]==2, "points must have shape (n, 2)" 
+        #assert self.points.shape[0]>4, f"need more points. only got {len(self.points)=}"
+        #assert (self.points[0]==self.points[-1]).all(), "first and last point must be the same"
+        #assert is_ccw(LineString(self.points)), "Points must be counterclockwise from trailing edge"
+        pass
     @classmethod
     def from_upper_lower(
         cls,

@@ -287,10 +287,11 @@ def resample_shapes(
     resampler = _make_segment_resampler_to_counts(counts, core_resampler=core_resampler)
     results = [shape0]
     for shape in shapes[1:]:
-        result, _ = _resample_shape(
+        result, each_counts = _resample_shape(
             shape,
             segment_resampler=resampler,
             deflection_angle_split_deg=deflection_angle_split_deg
         )
+        assert all(a==b for a,b in zip(counts,each_counts)), "resampler failed to match counts of first shape??"
         results.append(result)
     return results
