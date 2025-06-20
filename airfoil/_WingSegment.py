@@ -9,6 +9,8 @@ from airfoil.util.pyvista_helpers import create_ruled_surface
 import numpy as np
 from numpy.typing import ArrayLike
 
+import pyvista as pv
+
 
 from dataclasses import dataclass, replace
 
@@ -74,7 +76,7 @@ class WingSegment:
         meshb = self.right.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate(( self.length/2,0,0))
 
         meshc = create_ruled_surface(a_3d,b_3d)
-        mesh_target = (mesha + meshb + meshc).clean().fill_holes(hole_size=20)
+        mesh_target = pv.merge([mesha, meshb, meshc]).clean().fill_holes(hole_size=20)
         mesh_target = mesh_target.compute_normals(auto_orient_normals=True)
         #assert mesh_target.is_manifold
         return mesh_target

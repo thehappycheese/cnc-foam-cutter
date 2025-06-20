@@ -111,7 +111,7 @@ class Airfoil:
             max_camber_position=max_camber_position, 
             max_camber=max_camber,
         )(n=points)
-        return Airfoil.from_upper_lower(upper*chord_length,lower*chord_length)
+        return Airfoil.from_upper_lower(upper,lower).with_chord(chord_length)
     
     @classmethod
     def from_naca5(
@@ -153,6 +153,14 @@ class Airfoil:
                 ])
             )
         return replace(self, hinge=hinge)
+    
+    def compute_chord(self)->float:
+        """Naive measurement of chord by subtracting the minimum x coordinate from the maximum x coordinate"""
+        return self.points[:,0].max()-self.points[:,0].min()
+
+    def with_chord(self, new_chord:float) -> Airfoil:
+        """Warning: lossy if repeated. Will not work as expected if shape has been rotated as it uses compute_chord"""
+        return self.with_scale([new_chord/self.compute_chord()]*2)
     
     def with_translation(self, translation:ArrayLike)->Airfoil:
         translation = np.array(translation)
