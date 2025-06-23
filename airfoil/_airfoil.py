@@ -148,7 +148,7 @@ class Airfoil:
         response = requests.get(f"http://airfoiltools.com/airfoil/seligdatfile?airfoil={reference}")
         name, *coord_lines = response.text.strip().splitlines()
         return Airfoil(
-            points=np.array([list(map(float, item.strip().replace("  ", " ").split(" "))) for item in coord_lines])
+            points=ensure_closed(np.array([list(map(float, item.strip().replace("  ", " ").split(" "))) for item in coord_lines]))
         )
 
     def with_holes(self, holes:list[Hole]) -> Airfoil:

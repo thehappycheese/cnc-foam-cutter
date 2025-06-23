@@ -1,6 +1,7 @@
 from typing import Literal
 import numpy as np
 from ._naca4 import naca4_thickness
+from scipy.interpolate import interp1d
 
 def naca5_camber_standard(x, k1, r):
     """Camber (standard) combining front and back sections"""
@@ -47,21 +48,73 @@ def naca5_gradient_reflex(x, k1, k2_k1, r):
     return dy_c_dx
 
 
+# Lookup tables for NACA5 parameters (design CL = 0.3)
+NACA5_STANDARD_TABLE = {
+    'p': np.array([0.05, 0.10, 0.15, 0.20, 0.25]),
+    'r': np.array([0.0580, 0.126, 0.2025, 0.290, 0.391]),
+    'k1': np.array([361.40, 51.640, 15.957, 6.643, 3.230])
+}
+NACA5_REFLEX_TABLE = {
+    'p': np.array([0.10, 0.15, 0.20, 0.25]),
+    'r': np.array([0.130, 0.217, 0.318, 0.441]),
+    'k1': np.array([51.990, 15.793, 6.520, 3.191]),
+    'k2_k1': np.array([0.000764, 0.00677, 0.0303, 0.1355])
+}
 
-def get_naca5_parameters(type:Literal["standard","reflex"], camber_position:float):
-    p = camber_position
-    if type=="standard":
-        r = (3.33333333333212 * p**3 + 0.700000000000909 * p**2 + 1.19666666666638 * p - 0.00399999999996247)
-        k1 = (1514933.33335235 * p**4 - 1087744.00001147 * p**3 + 286455.266669048 * p**2 - 32968.4700001967 * p + 1420.18500000524)
+def get_naca5_parameters(type: Literal["standard","reflex"], camber_position: float, design_lift_coefficient: float = 0.3):
+    """
+    Get NACA5 parameters using lookup tables with interpolation and proper scaling.
+    
+    Parameters:
+    - type: "standard" or "reflex"
+    - camber_position: position of maximum camber (p)
+    - design_lift_coefficient: design lift coefficient for scaling
+    
+    Returns:
+    - r: position parameter
+    - k1: first camber parameter (scaled)
+    - k2_k1: second camber parameter ratio (reflex only, scaled)
+    """
+    # Scale factor for design lift coefficient (tables are for CL = 0.3)
+    scale_factor = design_lift_coefficient / 0.3
+    
+    if type == "standard":
+        table = NACA5_STANDARD_TABLE
+        
+        # Check bounds
+        p_min, p_max = table['p'][0], table['p'][-1]
+        if camber_position < p_min or camber_position > p_max:
+            raise ValueError(f"camber_position must be between {p_min} and {p_max} for standard profiles")
+        
+        # Interpolate parameters
+        r_interp = interp1d(table['p'], table['r'], kind='linear')
+        k1_interp = interp1d(table['p'], table['k1'], kind='linear')
+        
+        r = float(r_interp(camber_position))
+        k1 = float(k1_interp(camber_position)) * scale_factor
         k2_k1 = None
-    elif type=="reflex":
-        r = (10.6666666666861 * p**3 - 2.00000000001601 * p**2 + 1.73333333333684 * p - 0.0340000000002413)
-        k1 = (-27973.3333333385 * p**3 + 17972.8000000027 * p**2 - 3888.40666666711 * p + 289.076000000022)
-        k2_k1 = (85.5279999999984 * p**3 - 34.9828000000004 * p**2 + 4.80324000000028 * p - 0.21526000000003)
+        
+    elif type == "reflex":
+        table = NACA5_REFLEX_TABLE
+        
+        # Check bounds
+        p_min, p_max = table['p'][0], table['p'][-1]
+        if camber_position < p_min or camber_position > p_max:
+            raise ValueError(f"camber_position must be between {p_min} and {p_max} for reflex profiles")
+        
+        # Interpolate parameters
+        r_interp = interp1d(table['p'], table['r'], kind='linear')
+        k1_interp = interp1d(table['p'], table['k1'], kind='linear')
+        k2_k1_interp = interp1d(table['p'], table['k2_k1'], kind='linear')
+        
+        r = float(r_interp(camber_position))
+        k1 = float(k1_interp(camber_position)) * scale_factor
+        k2_k1 = float(k2_k1_interp(camber_position)) * scale_factor
+        
     else:
         raise ValueError("invalid type parameter")
     
-    return r,k1,k2_k1
+    return r, k1, k2_k1
 
 def naca5_camber(x: np.ndarray, type: Literal["standard","reflex"], k1: float, r: float, k2_k1: float|None = None) -> np.ndarray:
     """Calculate NACA5 camber line"""
@@ -101,7 +154,7 @@ def naca5(
     assert 0.05 <= max_camber_position <= 0.95, "max_camber_position must be between 0.05 and 0.95"
     
     # Get NACA5 parameters
-    r, k1, k2_k1 = get_naca5_parameters(type, max_camber_position)
+    r, k1, k2_k1 = get_naca5_parameters(type, max_camber_position, design_lift_coefficient)
     
     def _naca5(n: int = 200) -> tuple[np.ndarray, np.ndarray]:
         beta = np.linspace(0, np.pi, n)
