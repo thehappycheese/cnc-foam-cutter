@@ -8,14 +8,13 @@ from numpy.typing import ArrayLike
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
-from shapely import LineString, Polygon, is_ccw, constrained_delaunay_triangles, intersection
+from shapely import LineString, Polygon, constrained_delaunay_triangles, intersection
 
 import pyvista as pv
 
-
 from .naca import naca, naca4, naca5
 from .util.array_helpers import remove_sequential_duplicates
-from .util.linestring_helpers import ensure_closed
+from .util.linestring_helpers import ensure_closed, is_ccw
 
 from ._Decomposer import Decomposer
 
@@ -78,11 +77,14 @@ class Airfoil:
         return f"<Airfoil p={len(self.points)} h={len(self.holes)} w={size[0]:.1f} h={size[1]:.1f} />"
     
     def __post_init__(self) -> None:
-        #assert self.points.shape[1]==2, "points must have shape (n, 2)" 
-        #assert self.points.shape[0]>4, f"need more points. only got {len(self.points)=}"
-        #assert (self.points[0]==self.points[-1]).all(), "first and last point must be the same"
-        #assert is_ccw(LineString(self.points)), "Points must be counterclockwise from trailing edge"
-        pass
+        assert self.points.shape[1]==2, "points must have shape (n, 2)" 
+        assert self.points.shape[0]>4, f"need more points. only got {len(self.points)=}"
+        assert (self.points[0]==self.points[-1]).all(), "first and last point must be the same"
+        if not is_ccw(self.points):
+            self.points = self.points[::-1]
+            if not is_ccw(self.points):
+                raise ValueError("Something is wrong with the input points. Not able to be sorted into a counterclockwise direction")
+        
     @classmethod
     def from_upper_lower(
         cls,
@@ -135,6 +137,19 @@ class Airfoil:
     def from_naca_designation(cls, designation:str, chord_length:float, points:int=100):
         upper, lower = naca(designation, points)
         return Airfoil.from_upper_lower(upper*chord_length, lower*chord_length)
+
+    @classmethod
+    def from_airfoiltools_website(cls, reference:str) -> Airfoil:
+        """
+        e.g. `Airfoil.from_airfoiltools_website("naca23012-il").with_scale((100,100))`
+        is equivalent to `Airfoil.from_naca_designation("23012",chord_length=100)`
+        """
+        import requests
+        response = requests.get(f"http://airfoiltools.com/airfoil/seligdatfile?airfoil={reference}")
+        name, *coord_lines = response.text.strip().splitlines()
+        return Airfoil(
+            points=np.array([list(map(float, item.strip().replace("  ", " ").split(" "))) for item in coord_lines])
+        )
 
     def with_holes(self, holes:list[Hole]) -> Airfoil:
         return replace(self, holes=holes)
