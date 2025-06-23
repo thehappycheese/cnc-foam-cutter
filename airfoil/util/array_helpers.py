@@ -1,7 +1,6 @@
-from warnings import deprecated
 from collections import deque
 from itertools import islice, pairwise
-from typing import Generator, Iterable, Sequence
+from typing import Generator, Iterable, Sequence, Callable
 
 import numpy as np
 from scipy import ndimage
@@ -44,3 +43,20 @@ def map_to_range(values:np.ndarray, min:float, max:float):
     target_range = max-min
     current_range = values.max()-values.min()
     return (values-values.min())/current_range*target_range+min
+
+
+def create_array_interpolator[T](
+    arrays:list[tuple[float, np.ndarray[T]]]
+) -> Callable[[float], np.ndarray[T]]:
+    first_position = arrays[0][0]
+    last_position = arrays[-1][0]
+    def _inner_create_array_interpolator(f:float):
+        if f<=first_position:
+            return arrays[0][1]
+        if f>=last_position:
+            return arrays[-1][1]
+        for (pos_a, array_a), (pos_b, array_b) in pairwise(arrays):
+            if f <= pos_b:
+                ratio = (f-pos_a)/(pos_b-pos_a)
+                return array_a + ratio*(array_b-array_a)
+    return _inner_create_array_interpolator
