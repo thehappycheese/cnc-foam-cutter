@@ -172,7 +172,7 @@ def split_and_roll_at_top_right(
     )
 
 
-def make_segment_resampler_to_length(max_segment_length:float, core_resampler:Callable[[np.ndarray, Callable[[float],int]],np.ndarray]=resample_spline_fallback_linear) -> Callable[[list[np.ndarray]], list[np.ndarray]]:
+def _make_segment_resampler_to_length(max_segment_length:float, core_resampler:Callable[[np.ndarray, Callable[[float],int]],np.ndarray]=resample_spline_fallback_linear) -> Callable[[list[np.ndarray]], list[np.ndarray]]:
     """set core_resampler=resample_linear to skip trying spline interpolation"""
     return lambda segments: [
         core_resampler(
@@ -183,7 +183,7 @@ def make_segment_resampler_to_length(max_segment_length:float, core_resampler:Ca
         in segments
     ]
 
-def make_segment_resampler_to_counts(counts:list[int], core_resampler:Callable[[np.ndarray, Callable[[float],int]],np.ndarray]=resample_spline_fallback_linear) -> Callable[[list[np.ndarray]], list[np.ndarray]]:
+def _make_segment_resampler_to_counts(counts:list[int], core_resampler:Callable[[np.ndarray, Callable[[float],int]],np.ndarray]=resample_spline_fallback_linear) -> Callable[[list[np.ndarray]], list[np.ndarray]]:
     """set core_resampler=resample_linear to skip trying spline interpolation"""
     return lambda segments: [
         core_resampler(
@@ -197,9 +197,9 @@ def make_segment_resampler_to_counts(counts:list[int], core_resampler:Callable[[
 def _first_point_index_selector_top_right(points:np.ndarray) -> int:
     return int(np.argmax(points[:,0]+points[:,1]))
 
-def resample_shape(
+def _resample_shape(
     shape:np.ndarray,
-    segment_resampler:Callable[[list[np.ndarray]], list[np.ndarray]] = make_segment_resampler_to_length(1.0),
+    segment_resampler:Callable[[list[np.ndarray]], list[np.ndarray]] = _make_segment_resampler_to_length(1.0),
     first_point_selector:Callable[[np.ndarray], int]                 = _first_point_index_selector_top_right,
     deflection_angle_split_deg:float=30,
 ):
@@ -278,16 +278,16 @@ def resample_shapes(
     > note that in the example above `deflection_angle_split_deg` is adjusted from its default value
     > as there is a shallow angle in `b`
     """
-    shape0, counts = resample_shape(
+    shape0, counts = _resample_shape(
         shapes[0],
-        segment_resampler          = make_segment_resampler_to_length(target_length, core_resampler=core_resampler),
+        segment_resampler          = _make_segment_resampler_to_length(target_length, core_resampler=core_resampler),
         first_point_selector       = first_point_selector,
         deflection_angle_split_deg = deflection_angle_split_deg,
     )
-    resampler = make_segment_resampler_to_counts(counts, core_resampler=core_resampler)
+    resampler = _make_segment_resampler_to_counts(counts, core_resampler=core_resampler)
     results = [shape0]
     for shape in shapes[1:]:
-        result, each_counts = resample_shape(
+        result, each_counts = _resample_shape(
             shape,
             segment_resampler=resampler,
             deflection_angle_split_deg=deflection_angle_split_deg
