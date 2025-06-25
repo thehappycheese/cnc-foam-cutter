@@ -80,3 +80,21 @@ class WingSegment:
         mesh_target = mesh_target.compute_normals(auto_orient_normals=True)
         #assert mesh_target.is_manifold
         return mesh_target
+    
+    @classmethod
+    def plot_wing_segments(cls, segments:list[WingSegment], pt:pv.Plotter|None=None, decomposer:Decomposer|None=None):
+        if pt is None:
+            pt = pv.Plotter()
+        if decomposer is None:
+            decomposer = Decomposer()
+        o = 0
+        wing_meshes = []
+        for segment in segments:
+            o += segment.length/2
+            msh = segment.to_mesh(decomposer)
+            wing_meshes.append(msh.translate([o,0,0]))
+            wing_meshes.append(msh.scale([-1,1,1]).translate([-o,0,0]).flip_faces())
+            o += segment.length/2
+        for m in wing_meshes:
+            pt.add_mesh(m.rotate_x(-4).translate((0,0,60)))
+        return pt
