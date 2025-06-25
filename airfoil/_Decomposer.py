@@ -24,7 +24,7 @@ class Decomposer:
     upcut_kerf            :float          = 0.01
     buffer                :float          = 0
     tolerance             :float          = 0.05
-    split_angle_deg       :float          = 30
+    split_angle_deg       :float          = 70
     segment_target_length :float          = 1.0
     _length_counts        :list[int]|None = None
 
