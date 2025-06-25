@@ -86,7 +86,7 @@ def create_airfoil_sampler(
     chord           : Callable[[float], float],
     washout         : Callable[[float], float],
     rotation_center : Callable[[float], float],
-)->Airfoil:
+) -> Callable[[float], Airfoil]:
     return lambda x: (
         airfoil(x)
         .with_chord(chord(x))
