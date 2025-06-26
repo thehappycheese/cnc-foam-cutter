@@ -9,7 +9,7 @@ from numpy.typing import ArrayLike
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 
-from shapely import LineString, Polygon, constrained_delaunay_triangles, intersection
+from shapely import LineString, Polygon, Point, constrained_delaunay_triangles, intersection
 
 import pyvista as pv
 
@@ -22,13 +22,17 @@ from ._Decomposer import Decomposer
 @dataclass
 class Hole:
     diameter_mm:float
-    position:np.ndarray
+    position:tuple[float,float]|np.ndarray
     def __post_init__(self):
+        self.position = np.array(self.position)
         assert self.position.shape == (2,), "position must have shape `(2)`"
+    
+    def to_polygon(self):
+        return Point(self.position).buffer(self.diameter_mm/2)
 
 @dataclass
 class Hinge:
-    position: ArrayLike
+    position: tuple[float,float]|np.ndarray
     angle_deg: float = 60
     rotation_deg: float = -20
     height: float = 300.0
@@ -257,7 +261,8 @@ class Airfoil:
     def plot(
             self,
             ax:Axes|None=None,
-            decomposer:Decomposer|None=None):
+            decomposer:Decomposer|None=None
+        ):
         if ax is None:
             fig,ax = plt.subplots(figsize=(10,10))
         if decomposer is None:
@@ -268,12 +273,26 @@ class Airfoil:
         ax.set_aspect("equal")
         return ax, [len(chunk) for chunk in decomposed]
     
-    def plot_raw(self, ax:Axes|None=None, ):
-        
+    def plot_raw(
+            self,
+            ax:Axes|None=None,
+            show_holes:bool = False,
+            show_hinge:bool = False,
+            marker_size=2,
+            **kwargs,
+        ):
+        """plot outline, holes and hinge without performing boolean operations
+        This is useful to diagnose issues (e.g. your hinge cut is dividing the airfoil into two parts, or a hole doesn't lie within the airfoil.)"""
         if ax is None:
             fig,ax = plt.subplots(figsize=(10,10))
         
-        ax.plot(*self.points.transpose(),"o-",markersize=2)
+        ax.plot(*self.points.transpose(),"o-",markersize=marker_size,**kwargs)
+        if show_holes:
+            for hole in self.holes:
+                ax.plot(*np.array(hole.to_polygon().exterior.coords).transpose(), "o-", markersize=marker_size,**kwargs)
+        if show_hinge:
+            ax.plot(*np.array(self.hinge.to_polygon().exterior.coords).transpose(), "o-", markersize=marker_size,**kwargs)
+
         ax.set_aspect("equal")
         return ax
     
