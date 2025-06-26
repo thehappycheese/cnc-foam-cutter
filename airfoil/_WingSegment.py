@@ -1,4 +1,5 @@
 from __future__ import annotations
+import warnings
 from airfoil._Decomposer import Decomposer
 from airfoil._airfoil import Airfoil
 from airfoil.util.array_helpers import remove_sequential_duplicates
@@ -71,20 +72,34 @@ class WingSegment:
             axis=1
         )
 
-        lengths = [len(item) for item in ad]
-        mesha = self.left.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate((-self.length/2,0,0))
+        mesha = self.left.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate((-self.length/2,0,0)).flip_faces()
         meshb = self.right.to_mesh(decomposer).rotate_x(90).rotate_z(90).translate(( self.length/2,0,0))
 
         meshc = create_ruled_surface(a_3d,b_3d)
         mesh_target = pv.merge([mesha, meshb, meshc]).clean().fill_holes(hole_size=20)
         mesh_target = mesh_target.compute_normals(auto_orient_normals=True)
-        #assert mesh_target.is_manifold
+        if not mesh_target.is_manifold:
+            warnings.warn("Non-Manifold result from WingSegment.to_mesh()")
+        mesh_target=mesh_target.compute_normals(
+            cell_normals=False,
+            point_normals=True,
+            split_vertices=True,
+            #feature_angle=smooth_angle,
+            auto_orient_normals=True
+        )
         return mesh_target
     
     @classmethod
     def plot_wing_segments(cls, segments:list[WingSegment], pt:pv.Plotter|None=None, decomposer:Decomposer|None=None):
         if pt is None:
             pt = pv.Plotter()
+        wing_meshes = WingSegment.to_meshes(segments=segments, decomposer=decomposer)
+        for m in wing_meshes:
+            pt.add_mesh(m.rotate_x(-4).translate((0,0,60)))
+        return pt
+    
+    @classmethod
+    def to_meshes(cls, segments:list[WingSegment], decomposer:Decomposer|None=None, add_mirrored:bool=False):
         if decomposer is None:
             decomposer = Decomposer()
         o = 0
@@ -93,8 +108,7 @@ class WingSegment:
             o += segment.length/2
             msh = segment.to_mesh(decomposer)
             wing_meshes.append(msh.translate([o,0,0]))
-            wing_meshes.append(msh.scale([-1,1,1]).translate([-o,0,0]).flip_faces())
+            if add_mirrored:
+                wing_meshes.append(msh.scale([-1,1,1]).translate([-o,0,0]).flip_faces())
             o += segment.length/2
-        for m in wing_meshes:
-            pt.add_mesh(m.rotate_x(-4).translate((0,0,60)))
-        return pt
+        return wing_meshes
