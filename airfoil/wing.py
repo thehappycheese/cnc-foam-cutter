@@ -1,6 +1,5 @@
-from warnings import deprecated
 import numpy as np
-from typing import Callable, TYPE_CHECKING
+from typing import Callable
 
 from ._airfoil import Airfoil
 
@@ -15,42 +14,62 @@ def calculated_wing_cube_loading(weight, area):
     return weight/area**1.5
 
 def angle_degrees_to_slope(angle_degrees:float):
+    """`tan(angle_degrees / 180 * PI)` this is just a dumb wrapper for the `np.tan(np.deg2rad())` functions"""
     return np.tan(np.deg2rad(angle_degrees))
-
-@deprecated("Use auto_piecewise or auto_interpolate")
-def compound_dihedral_rise(x_b:float, dihedral:float, compound_dihedral:float, compound_break:float):
-    return np.where(np.abs(x_b)<compound_break,
-        np.abs(x_b) * angle_degrees_to_slope(dihedral),
-        compound_break * angle_degrees_to_slope(dihedral) + (np.abs(x_b)-compound_break)*angle_degrees_to_slope(compound_dihedral)
-    )
 
 def auto_piecewise(funcs: list[tuple[float, Callable[[float],float]]]):
     """Create a function that samples a list of functions.
-    The first function alway's starts from `x=0`. Each function must be specified 
-    with the upper limit of its domain in a list of tuples like:
+
+    The first function is evaluated normally, then subsequent functions are
+    evaluated with special rules to ensure the output is continuous (see below)
+
+    Each function must be specified with the upper limit of its domain
+    in a list of tuples like the following example:
 
     ```python
     f = auto_piecewise([
-        (10, lambda x: x*0.5  + 5),    
-        (20, lambda x: x*2.0 - 1),
+        (10, lambda x: x*0.5 + 5), # f1 [ 0, 10]
+        (20, lambda x: x*2.0    ), # f2 (10, 20]
+        (25, lambda x: -x**2    ), # f3 (20, 25]
     ])
     ```
 
-    in the example above the result `f` will start at a y-intercept of 5 and have a slope of 0.5
-    from 0 to 10 followed by a slope of 2.0 from 10 to 20.
-    The function will be automatically continuous at `x=10`
+    ```text
+    30-|           ..
+       |          .   .
+       |         .     .
+       |        .      .
+    10-|       .        .
+       |   ...          .
+     5-|...              .
+       |                 
+       |
+       |
+     0-|-------------------
+             10      20  25
+    ```
+
+    In the example above
+
+    - the function `f(x)` is defined from x=0 to x=20 (sampling outside this range returns None) 
+    - `f` will have a y-intercept of 5
+    - `f` will have a slope of 0.5 from 0 to 10
+    - `f` will have a slope of 2.0 from 10 to 20
+    - `f` will have a slope of -2*(x-20) from 20 to 25
+    - `f` will be automatically continuous at `x=10` and `x=20`
     
     To ensure the result is a continuous function, the following rules are applied:
     - Each function is evaluated as if from `x = 0` to `x = o_n - o_{n-1}`
       where `o_n` os the upper limit specified for the `n`th function
-      - This makes it easier to design the curve you need without offsetting the function to match the end of the last function
+      - This makes it easier to design the curve you need without manually 
+        offsetting the function to match the end of the last function
     - The y-intercept is discarded for all functions except the first.
       i.e. the output of the function is automatically vertically offset so
       the end of the last segment matches the beginning of the next.
-    
-    The resulting function returns `None` if the input is larger than the last limit. 
     """
     def _inner_auto_piecewise(x:float):
+        if x<0:
+            return None
         offset_y = 0
         offset_x = 0
         for index, (limit, func) in enumerate(funcs):
@@ -60,22 +79,36 @@ def auto_piecewise(funcs: list[tuple[float, Callable[[float],float]]]):
             else:
                 offset_y+=func(limit-offset_x)-f0
                 offset_x=limit
-    return _inner_auto_piecewise
+    return np.vectorize(_inner_auto_piecewise)
 
 def mirror(func:Callable[[float],float]):
     """Mirror a function over the Y-axis by injecting `func(abs(x))`"""
     return lambda x: func(np.abs(x))
 
 def ellipse_quadrant(rx:float, ry:float, x:float):
+    """Positive quadrant of an ellipse centered at the origin as a function of x.
+    Caller must ensure that `x x>=0 and x>=rx` or `np.nan` values will be returned without warning"""
     theta = np.arccos(x/rx)
     return ry * np.sin(theta)
 
-def calculate_wing_area(x, leading_edge, trailing_edge):
-    v = leading_edge-trailing_edge
-    return (np.diff(x) * (v[1:]+v[:-1])/2).sum()
-
 def auto_interpolate(points):
-    """creates a function that wraps `np.interp()` where `points` must be in the shape (n,2) where n is the number of points.
+    """Returns a new function that interpolates between a list of `n` points where
+    `points` must be in the shape (n,2)
+
+    `points` must be ordered such that x-coordinates are strictly increasing.
+    
+    ```python
+    f = auto_interpolate([
+        (0, 1),
+        (8, 5)
+    ])
+    f(4)  # interpolates between (0,1) and (8,5) at x=4
+    ```
+
+    >>> 3.0
+    
+    This is a convenience wrapper for that `np.interp` like     
+    `return lambda x: np.interp(x, *np.array(points).T)`
     """
     return lambda x: np.interp(x, *np.array(points).T)
 
