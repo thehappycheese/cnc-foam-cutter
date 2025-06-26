@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal
+from pathlib import Path
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -139,15 +140,37 @@ class Airfoil:
         return Airfoil.from_upper_lower(upper*chord_length, lower*chord_length)
 
     @classmethod
-    def from_airfoiltools_website(cls, reference:str) -> Airfoil:
+    def from_airfoiltools_website(cls, reference:str, cache_dir:Path|str|None=None) -> Airfoil:
         """
         e.g. `Airfoil.from_airfoiltools_website("naca23012-il").with_scale((100,100))`
         is equivalent to `Airfoil.from_naca_designation("23012",chord_length=100)`
+        
+        Args:
+            reference: The airfoil reference string
+            cache_dir: Directory to store cached airfoil data (default: "./data")
         """
-        import requests
-        response = requests.get(f"http://airfoiltools.com/airfoil/seligdatfile?airfoil={reference}")
-        name, *coord_lines = response.text.strip().splitlines()
-        return Airfoil(
+        coord_lines = None
+        if cache_dir is not None:
+            cache_path = Path(cache_dir)
+            cache_path.mkdir(parents=True, exist_ok=True)
+            cache_file = cache_path / f"{reference}.txt"
+            if cache_file.exists():
+                cached_data = cache_file.read_text().strip()
+                _name, *coord_lines = cached_data.splitlines()
+        if coord_lines is None:
+            import requests
+            response = requests.get(f"http://airfoiltools.com/airfoil/seligdatfile?airfoil={reference}")
+            response.raise_for_status()  # Raise an exception for bad status codes
+            
+            if cache_dir is not None:
+                cache_path = Path(cache_dir)
+                cache_path.mkdir(parents=True, exist_ok=True)
+                cache_file = cache_path / f"{reference}.txt"
+                cache_file.write_text(response.text)
+            
+            _name, *coord_lines = response.text.strip().splitlines()
+        
+        return cls(
             points=ensure_closed(np.array([list(map(float, item.strip().replace("  ", " ").split(" "))) for item in coord_lines]))
         )
 
