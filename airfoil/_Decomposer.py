@@ -93,40 +93,6 @@ class Decomposer:
                 for chunk, count in zip(chunks, self._length_counts)
             ]
 
-        # if self._length_counts is None:
-        #     result = []
-        #     for chunk in chunks:
-        #         new_segment_count = int(np.ceil(np.linalg.norm(np.diff(chunk,axis=0),axis=1).sum()/self.segment_target_length))
-        #         if len(chunk)<=4:
-        #             #linear
-        #             result.append(resample_linear_to_number_of_segments(chunk, new_segment_count))
-        #         else:
-        #             try:
-        #                 bspline, u = make_splprep(chunk.transpose())
-        #                 u_new = np.linspace(0, 1, new_segment_count)
-        #                 interped = bspline(u_new).transpose()
-        #                 assert self._is_valid_interpolation_result(interped)
-        #             except:
-        #                 warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
-        #                 interped = resample_linear_to_number_of_segments(chunk, new_segment_count)
-        #             result.append(interped)
-        #     self._length_counts = [len(chunk) for chunk in result]
-        # else:
-        #     result = []
-        #     for new_segment_count, chunk in zip(self._length_counts, chunks):
-        #         if len(chunk)<=4:
-        #             #linear
-        #             result.append(resample_linear_to_number_of_segments(chunk, new_segment_count))
-        #         else:
-        #             try:
-        #                 bspline, u = make_splprep(chunk.transpose())
-        #                 u_new = np.linspace(0, 1, new_segment_count)
-        #                 interped = bspline(u_new).transpose()
-        #                 assert self._is_valid_interpolation_result(interped)
-        #             except:
-        #                 warn(f"Bspline failed with error for {airfoil} {chunk=} attempting linear resampling instead")
-        #                 interped = resample_linear_to_number_of_segments(chunk, new_segment_count)
-        #             result.append(interped)
         return result
 
     def _is_valid_interpolation_result(self, result):

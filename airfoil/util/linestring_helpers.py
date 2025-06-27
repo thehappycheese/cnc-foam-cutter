@@ -21,24 +21,34 @@ def ensure_closed(values:np.ndarray):
         return values
     else:
         return np.concat([values,[values[0]]])
-    
+
+
+
 def split_linestring_by_angle(arr:np.ndarray, split_angle_deg:float=70)->list[np.ndarray]:
     arr_length, arr_dimentions = arr.shape
     assert arr_length>1
     assert arr_dimentions ==2
-    angles = []
-    lengths = []
-    for [a,b,c] in sliding_window(arr, 3):
-        ba = (a-b)/np.linalg.norm(a-b)
-        cb = (b-c)/np.linalg.norm(b-c)
-        lengths.append(np.linalg.norm(a-b))
-        angles.append(np.acos(np.dot(ba, cb)))
 
-    chunks = split_indexable(
+    return split_indexable(
         arr,
-        np.where(abs(np.array(angles))>np.deg2rad(split_angle_deg))[0]+1
+        np.where(
+            deflection_angle(arr)>np.deg2rad(split_angle_deg)
+        )[0]+1
     )
-    return chunks
+
+    # angles = []
+    # lengths = []
+    # for [a,b,c] in sliding_window(arr, 3):
+    #     ba = (a-b)/np.linalg.norm(a-b)
+    #     cb = (b-c)/np.linalg.norm(b-c)
+    #     lengths.append(np.linalg.norm(a-b))
+    #     angles.append(np.acos(np.dot(ba, cb)))
+
+    # chunks = split_indexable(
+    #     arr,
+    #     np.where(abs(np.array(angles))>np.deg2rad(split_angle_deg))[0]+1
+    # )
+    # return chunks
 
 def resample_long_segments(arr: np.ndarray, desired_length: float) -> np.ndarray:
     """
