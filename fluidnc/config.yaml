@@ -11,7 +11,7 @@ axes:
   x:
     steps_per_mm: 200
     max_rate_mm_per_min: 5000
-    acceleration_mm_per_sec2: 100
+    acceleration_mm_per_sec2: 400
     max_travel_mm: 300
     soft_limits: false
     homing:
@@ -50,7 +50,7 @@ axes:
   y:
     steps_per_mm: 42.441
     max_rate_mm_per_min: 5000
-    acceleration_mm_per_sec2: 100
+    acceleration_mm_per_sec2: 400
     max_travel_mm: 300
     soft_limits: false
     homing:
@@ -89,7 +89,7 @@ axes:
   z:
     steps_per_mm: 200
     max_rate_mm_per_min: 5000
-    acceleration_mm_per_sec2: 100
+    acceleration_mm_per_sec2: 400
     max_travel_mm: 300
     soft_limits: false
     homing:
@@ -128,7 +128,7 @@ axes:
   a:
     steps_per_mm: 42.441
     max_rate_mm_per_min: 5000
-    acceleration_mm_per_sec2: 100
+    acceleration_mm_per_sec2: 400
     max_travel_mm: 300
     soft_limits: false
     homing:
@@ -190,10 +190,12 @@ start:
 coolant:
   mist_pin: gpio.21
   delay_ms: 0
-#PWM:
-#  output_pin: gpio.25
-#  enable_pin: gpio.4
-#  direction_pin: NO_PIN
-#  pwm_hz: 5000
-#  off_on_alarm: true
-#  speed_map: 0=0.000% 1000=0.000% 24000=100.000%
+10V:
+ output_pin: gpio.25
+# enable_pin: gpio.4
+ direction_pin: NO_PIN
+ pwm_hz: 1000
+ off_on_alarm: true
+ speed_map: 0=0.000% 50=50.000% 100=100.000%
+ spinup_ms: 200
+ spindown_ms: 200
