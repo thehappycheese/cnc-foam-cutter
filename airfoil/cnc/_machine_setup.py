@@ -10,7 +10,7 @@ from airfoil.util.array_helpers import blur1d, map_to_range, remove_sequential_d
 
 from .cnc_machine_mesh import axis
 from ..util.pyvista_helpers import create_ruled_surface
-from ..util.path_planning import project_line_to_plane
+from ..util.path_planning import compensate_feedrate, project_line_to_plane
 from airfoil.util.linestring_helpers import (
     deflection_angle_padded,
     ensure_closed,
@@ -26,8 +26,8 @@ class MachineSetup:
     foam_height:float
     plane_spacing:float
     decomposer:Decomposer = field(default_factory=lambda:Decomposer())
-    max_cut_speed_mm_s:float = 300
-    min_cut_speed_mm_s:float = 230
+    max_cut_speed_mm_s:float = 200
+    min_cut_speed_mm_s:float = 100
     travel_speed:float       = 1000
     
     def with_recentered_part(self):
@@ -164,7 +164,7 @@ class MachineSetup:
         ])
         # li = linear_resampling_to_length(li,3)
         # lo = linear_resampling_to_length(lo,3)
-        instrucitons = np.concat([
+        instructions = np.concat([
             np.concat(
                 [
                     np.full((len(li),1), self.travel_speed),
@@ -184,6 +184,10 @@ class MachineSetup:
             ),
         ])
 
+        feedrate_compensation = np.array([compensate_feedrate(*i) for i in np.diff(instructions[:,1:],n=1,axis=0)])
+        feedrate_compensation = np.insert(feedrate_compensation,1,0)
+        instructions[:,0]*=feedrate_compensation
+
         if record_name is not None:
             rec = (
                 f'''{{\n'''
@@ -199,4 +203,4 @@ class MachineSetup:
             file = folder / f"{pd.Timestamp.now():%Y-%m-%d %H%M} {record_name}.txt"
             file.write_text(rec)
 
-        return instrucitons
+        return instructions

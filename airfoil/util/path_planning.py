@@ -94,11 +94,12 @@ def compensate_feedrate(dx, dy, dz, da):
     cnc.feed(compensated_feedrate, 100,0,100,0)
     ```
 
-    This function returns the ratio between the average magnitude of XY and ZA toolheads and the magnitude of the vector
+    This function returns the ratio between the maximum magnitude of XY and ZA toolheads and the magnitude of the vector
     XYZA.
-    This roughly aims to move the midpoint between toolheads move at the specified feedrate."""
+    This roughly aims to move both toolheads at a speed as high as possible without either exceeding the specified feedrate."""
     xy_magnitude = np.sqrt(dx**2 + dy**2)
     za_magnitude = np.sqrt(dz**2 + da**2)
     total_4d_magnitude = np.sqrt(dx**2 + dy**2 + dz**2 + da**2)
-    compensation_factor = total_4d_magnitude / ((xy_magnitude+za_magnitude)/2)
+    max_independent_magnitude = np.max([xy_magnitude,za_magnitude], axis=0)
+    compensation_factor = total_4d_magnitude / max_independent_magnitude
     return compensation_factor
