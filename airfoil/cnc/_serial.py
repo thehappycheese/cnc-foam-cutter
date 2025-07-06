@@ -5,10 +5,8 @@ import time
 class CNC:
     serial:Serial
 
-    def __init__(self, addr="socket://fluidnc.local:23"):
-        self.serial = serial.serial_for_url(addr)
-        time.sleep(0.100)
-        print(self.read_all())
+    def __init__(self, addr="socket://fluidnc.local:23", timeout:float|None=0.2):
+        self.serial = serial.serial_for_url(addr, timeout=timeout)
 
     def read_all(self)->str:
         buff = b""
@@ -20,8 +18,8 @@ class CNC:
 
     def write_read_all(self, message:str) -> str:
         self.serial.write(message.encode("ascii"))
-        time.sleep(0.200)
-        return self.read_all()
+        #time.sleep(0.200)
+        return self.serial.read_until().decode("ascii")
     
     def write_read_line(self, message:str) -> str:
         self.serial.write(message.encode("ascii"))
@@ -71,7 +69,11 @@ class CNC:
         """G0"""
         return self.writeln(f"G0 X{x} Y{y} Z{z} A{a}")
     
-    def feed(self, rate:float, x:float,y:float,z:float,a:float):
+    def feed(self, rate:float, x:float, y:float,z:float,a:float):
+        """
+        TODO: feedrate is not compensated 
+        see .util.path_planning.compensate_feedrate
+        """
         return self.writeln(f"G1 F{rate} X{x} Y{y} Z{z} A{a}")
     
     def metric(self):
@@ -81,6 +83,9 @@ class CNC:
         """
         Sends multiple G1 commands and waits for 'ok' response after each one.
         
+        TODO: feedrate is not compensated 
+        see .util.path_planning.compensate_feedrate
+
         Args:
             command_list: List of 5-element lists [feed, x, y, z, a] where:
                         - feed: Feed rate
@@ -129,6 +134,9 @@ class CNC:
         """
         Sends multiple G1 XY commands and waits for 'ok' response after each one.
         
+        TODO: feedrate is not compensated 
+        see .util.path_planning.compensate_feedrate
+
         Args:
             xy_tuples: List of (x, y) coordinate tuples
             

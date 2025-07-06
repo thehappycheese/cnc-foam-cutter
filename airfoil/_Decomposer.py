@@ -28,6 +28,10 @@ class Decomposer:
     segment_target_length :float          = 1.0
     _length_counts        :list[int]|None = None
 
+    def clone(self):
+        import copy
+        return copy.copy(self)
+
     def decompose_many(self, airfoils:list[Airfoil]):
         result = []
         for airfoil in airfoils:

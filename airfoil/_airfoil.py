@@ -290,7 +290,7 @@ class Airfoil:
         if show_holes:
             for hole in self.holes:
                 ax.plot(*np.array(hole.to_polygon().exterior.coords).transpose(), "o-", markersize=marker_size,**kwargs)
-        if show_hinge:
+        if show_hinge and self.hinge is not None:
             ax.plot(*np.array(self.hinge.to_polygon().exterior.coords).transpose(), "o-", markersize=marker_size,**kwargs)
 
         ax.set_aspect("equal")

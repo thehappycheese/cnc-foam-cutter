@@ -128,20 +128,20 @@ bool dequeueCommand(Command* cmd) {
 void executeCommand(const Command& cmd) {
   switch (cmd.type) {
     case CMD_OUTPUT_ON:
-      Serial.println("OUT1");
+      Serial.print("OUT1");
       powerSupplyOn = true;
       break;
     case CMD_OUTPUT_OFF:
-      Serial.println("OUT0");
+      Serial.print("OUT0");
       powerSupplyOn = false;
       break;
     case CMD_SET_VOLTAGE:
       Serial.print("VSET1:");
-      Serial.println(cmd.value);
+      Serial.print(cmd.value);
       break;
     case CMD_SET_CURRENT:
       Serial.print("ISET1:");
-      Serial.println(cmd.value);
+      Serial.print(cmd.value);
       break;
   }
 }

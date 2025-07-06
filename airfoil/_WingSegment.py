@@ -1,5 +1,5 @@
 from __future__ import annotations
-import warnings
+from warnings import warn, deprecated
 from airfoil._Decomposer import Decomposer
 from airfoil._airfoil import Airfoil
 from airfoil.util.array_helpers import remove_sequential_duplicates
@@ -79,7 +79,7 @@ class WingSegment:
         mesh_target = pv.merge([mesha, meshb, meshc]).clean().fill_holes(hole_size=20)
         mesh_target = mesh_target.compute_normals(auto_orient_normals=True)
         if not mesh_target.is_manifold:
-            warnings.warn("Non-Manifold result from WingSegment.to_mesh()")
+            warn("Non-Manifold result from WingSegment.to_mesh()")
         mesh_target=mesh_target.compute_normals(
             cell_normals=False,
             point_normals=True,
@@ -99,14 +99,44 @@ class WingSegment:
         return pt
     
     @classmethod
-    def to_meshes(cls, segments:list[WingSegment], decomposer:Decomposer|None=None, add_mirrored:bool=False):
+    def to_meshes(
+        cls,
+        segments:list[WingSegment],
+        decomposer:Decomposer|None=None,
+        add_mirrored:bool=False,
+        share_decomposer:bool=True,
+        first_segment_is_central:bool=True,
+    ):
         if decomposer is None:
             decomposer = Decomposer()
         o = 0
         wing_meshes = []
-        for segment in segments:
+        for i, segment in enumerate(segments):
+            if share_decomposer:
+                current_decomposer = decomposer
+            else:
+                current_decomposer = decomposer.clone()
+            if not first_segment_is_central or i > 0:
+                o += segment.length / 2
+            msh = segment.to_mesh(current_decomposer)
+            wing_meshes.append(msh.translate([o,0,0]))
+            if add_mirrored and (i>0 or not first_segment_is_central):
+                wing_meshes.append(msh.scale([-1,1,1]).translate([-o,0,0]).flip_faces())
             o += segment.length/2
-            msh = segment.to_mesh(decomposer)
+        return wing_meshes
+
+    @classmethod
+    @deprecated("use to_meshes with share_decomposer=True")
+    def to_meshes_unshared_decomposer(cls, segments:list[WingSegment], decomposer:Decomposer|None=None, add_mirrored:bool=False):
+        o = 0
+        wing_meshes = []
+        for segment in segments:
+            if decomposer is None:
+                decomposer_ea = Decomposer()
+            else:
+                decomposer_ea = decomposer.clone()
+            o += segment.length/2
+            msh = segment.to_mesh(decomposer_ea)
             wing_meshes.append(msh.translate([o,0,0]))
             if add_mirrored:
                 wing_meshes.append(msh.scale([-1,1,1]).translate([-o,0,0]).flip_faces())

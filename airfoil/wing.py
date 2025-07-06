@@ -69,7 +69,7 @@ def auto_piecewise(funcs: list[tuple[float, Callable[[float],float]]]):
     """
     def _inner_auto_piecewise(x:float):
         if x<0:
-            return None
+            return np.nan
         offset_y = 0
         offset_x = 0
         for index, (limit, func) in enumerate(funcs):
@@ -79,9 +79,10 @@ def auto_piecewise(funcs: list[tuple[float, Callable[[float],float]]]):
             else:
                 offset_y+=func(limit-offset_x)-f0
                 offset_x=limit
+        return np.nan
     return np.vectorize(_inner_auto_piecewise)
 
-def mirror(func:Callable[[float],float]):
+def mirror[T](func:Callable[[float],T]):
     """Mirror a function over the Y-axis by injecting `func(abs(x))`"""
     return lambda x: func(np.abs(x))
 
