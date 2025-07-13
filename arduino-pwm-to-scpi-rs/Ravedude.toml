@@ -1,0 +1,5 @@
+[general]
+    board = "promini-5v"
+    port  = "COM10"
+    open-console = true
+    serial-baudrate = 57600
