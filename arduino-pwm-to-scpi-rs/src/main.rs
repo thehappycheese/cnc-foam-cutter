@@ -1,24 +1,23 @@
 #![feature(abi_avr_interrupt)]
+#![feature(f16)]
+#![allow(static_mut_refs)]
 #![no_std]
 #![no_main]
 
 mod pulse_meter;
+use pulse_meter::{
+    PulseMeter,
+    PulseData
+};
 
 // ICP1 is physical pin 12 which is pin 8 on th Arduino Pro Mini board
 use panic_halt as _;
 //use arduino_hal::prelude::*;
 use avr_device::interrupt;
 
-// Global variables for interrupt handler (need to be atomic/volatile)
-static mut PULSE_START: u16 = 0;
-static mut PULSE_WIDTH: u16 = 0;
-static mut PULSE_PERIOD: u16 = 0;
-static mut NEW_PULSE_DATA: bool = false;
 
-struct PulseInfo{
-    period:u16,
-    width:u16,
-}
+// Global variables for interrupt handler (need to be atomic/volatile)
+static mut PULSE_METER:PulseMeter = PulseMeter::new();
 
 #[arduino_hal::entry]
 fn main() -> ! {
@@ -53,27 +52,16 @@ fn main() -> ! {
     // Enable global interrupts
     unsafe { interrupt::enable() };
 
-    let mut pulse_info:Option<PulseInfo>;
     loop {
         // Check for new pulse data
-        pulse_info = interrupt::free(|_| {
-            unsafe {
-                if NEW_PULSE_DATA {
-                    NEW_PULSE_DATA = false;
-                    Some(PulseInfo{period:PULSE_PERIOD, width:PULSE_WIDTH})
-                }else{
-                    None
-                }
-            }
-        });
-        if let Some(pulse_info)=pulse_info {
-            //let frequency = (16_000_000u32 / 64u32) / pulse_info.period as u32;
-            //let duty_cycle = (pulse_info.width as u32 * 100) / pulse_info.period as u32;
+        if let Some(PulseData{width, period}) = interrupt::free(|_| {
+            unsafe{PULSE_METER.latest_data.clone()}
+        }) {
+            let duty_cycle = width as f16 / period as f16;
             ufmt::uwriteln!(
                 &mut serial,
-                "period {} width {}", 
-                pulse_info.period,
-                pulse_info.width
+                "duty_cycle {}", 
+                (duty_cycle * 1000f16) as u16
             ).unwrap();
         }
         
@@ -84,34 +72,5 @@ fn main() -> ! {
 // This is the Rust equivalent of ISR(TIMER1_CAPT_vect)
 #[interrupt(atmega328p)]
 fn TIMER1_CAPT() {
-    let tc1 = unsafe { &(*arduino_hal::pac::TC1::ptr()) };
-    
-    unsafe {
-        static mut LAST_CAPTURE: u16 = 0;
-        static mut MEASURING: bool = false;
-        
-        let current_capture = tc1.icr1.read().bits();
-        
-        if !MEASURING {
-            // Switch to falling edge detection
-            tc1.tccr1b.modify(|_, w| w.ices1().clear_bit());
-            // First rising edge - start measurement
-            PULSE_START = current_capture;
-            MEASURING = true;
-        } else {
-            if tc1.tccr1b.read().ices1().bit_is_clear() {
-                // Falling edge - end of pulse
-                // Switch back to rising edge detection
-                tc1.tccr1b.modify(|_, w| w.ices1().set_bit());
-                PULSE_WIDTH = current_capture.wrapping_sub(PULSE_START);
-            } else {
-                // Rising edge - end of period
-                PULSE_PERIOD = current_capture.wrapping_sub(LAST_CAPTURE);
-                MEASURING = false;
-                NEW_PULSE_DATA = true;
-            }
-        }
-        
-        LAST_CAPTURE = current_capture;
-    }
+    unsafe {PULSE_METER.handle_capture();}// the reference in the main loop must be made inside
 }
