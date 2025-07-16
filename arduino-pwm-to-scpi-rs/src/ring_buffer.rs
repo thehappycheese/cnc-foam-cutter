@@ -74,4 +74,18 @@ impl<const N: usize> RingBuffer<N> {
         self.sum = 0;
         // Note: We don't need to clear the buffer array since we track count
     }
+
+    pub fn all_same(&self)->bool{
+        if (self.count as usize) < N {
+            false
+        }else{
+            let first = self.buffer[0];
+            for i in &self.buffer[1..]{
+                if *i != first{
+                    return false
+                }
+            }
+            true
+        }
+    }
 }

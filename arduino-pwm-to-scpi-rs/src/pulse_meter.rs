@@ -1,11 +1,6 @@
 use crate::ring_buffer::RingBuffer;
 use arduino_hal::simple_pwm::Prescaler;
 
-#[derive(Clone, Copy)]
-pub struct PulseData {
-    pub width: u16,
-    pub period: u16,
-}
 
 enum PulseState {
     WaitingForRisingEdge,
@@ -15,7 +10,6 @@ enum PulseState {
 
 pub struct PulseMeter {
     state: PulseState,
-    latest_data: Option<PulseData>,
     prescaler:Prescaler,
     ring_buffer: RingBuffer<32>
 }
@@ -26,7 +20,6 @@ impl PulseMeter {
     pub const fn new(prescaler:Prescaler) -> Self {
         Self {
             state: PulseState::WaitingForRisingEdge,
-            latest_data: None,
             prescaler,
             ring_buffer:RingBuffer::new()
         }
@@ -71,8 +64,6 @@ impl PulseMeter {
 
         macro_rules! switch_to_rising_edge_detection {($tc1:expr) => { $tc1.tccr1b.modify(|_, w| w.ices1().set_bit()) }}
         macro_rules! switch_to_falling_edge_detection {($tc1:expr) => { $tc1.tccr1b.modify(|_, w| w.ices1().clear_bit()) }}
-        // macro_rules! is_rising_edge_detection {($tc1:expr) => {$tc1.tccr1b.read().ices1().bit_is_set()}}
-        // macro_rules! is_falling_edge_detection {($tc1:expr) => {$tc1.tccr1b.read().ices1().bit_is_clear()}}
 
         match self.state {
             PulseState::WaitingForRisingEdge => {
@@ -87,20 +78,14 @@ impl PulseMeter {
             PulseState::WaitForEndOfPeriod { rising_edge_timestamp, width } => {
                 switch_to_falling_edge_detection!(tc1);
                 let period = current_timestamp.wrapping_sub(rising_edge_timestamp);
-                self.latest_data = Some(PulseData { width, period });
-                self.ring_buffer.push(((width as u32*1000)/period as u32) as u16);
+                self.ring_buffer.push(((width as u32*100)/period as u32) as u16);
                 self.state = PulseState::WaitingForFallingEdge { rising_edge_timestamp: current_timestamp }
             }
         }
     }
 
-    pub fn duty_cycle(&self)->Option<f16>{
-        let result = avr_device::interrupt::free(|_| self.latest_data.clone());
-        return result.map(|PulseData{width,period}|width as f16 / period as f16)
-    }
-
     pub fn duty_cycle_2(&self) -> Option<u16>{
-        let result = self.ring_buffer.average();
+        let result = self.ring_buffer.average().map(|v|v+1);
         return result;
     }
 }
