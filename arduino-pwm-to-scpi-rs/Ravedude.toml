@@ -2,4 +2,4 @@
     board = "promini-5v"
     port  = "COM10"
     open-console = true
-    serial-baudrate = 57600
+    serial-baudrate = 9600

@@ -7,3 +7,7 @@ runner = "ravedude"
 
 [unstable]
 build-std = ["core"]
+panic="abort"
+
+[alias]
+test-host = "test --target x86_64-unknown-linux-gnu"

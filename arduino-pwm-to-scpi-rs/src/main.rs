@@ -7,13 +7,13 @@
 mod pulse_meter;
 use pulse_meter::PulseMeter;
 
-mod ring_buffer;
-use crate::{messaging::PSUCommand, queue::FixedQueue, ring_buffer::RingBuffer};
-
-mod messaging;
-mod queue;
-mod float_format;
-use float_format::format_float_2dp;
+mod shared;
+use shared::{
+    messaging::PSUCommand,
+    queue::FixedQueue,
+    ring_buffer::RingBuffer,
+    float_format::format_float_2dp,
+};
 
 use arduino_hal::simple_pwm::Prescaler;
 use panic_halt as _;
@@ -51,46 +51,44 @@ fn main() -> ! {
 
     loop {
         ticks_since_last_update +=1;
-        ticks_since_last_send +=1;
-
-
+        let overdue_for_set = ticks_since_last_update>=MAX_TICKS_BETWEEN_UPDATE;
+        if overdue_for_set{
+            ticks_since_last_update = MAX_TICKS_BETWEEN_UPDATE; // try prevent idle overflow
+        }
         
-
-        if let Some(duty_cycle) = unsafe{PULSE_METER.duty_cycle_2()} {
-            let overdue_for_set = ticks_since_last_update>=MAX_TICKS_BETWEEN_UPDATE;
-            if overdue_for_set{
-                ticks_since_last_update = MAX_TICKS_BETWEEN_UPDATE; // try prevent idle overflow
-            }
-            debouncer.push(duty_cycle);
-            if debouncer.all_same() || overdue_for_set {
-                if set_value!=duty_cycle || overdue_for_set {
-                    set_value = duty_cycle;
-                    ticks_since_last_update = 0;
-                    if message_queue.space()>=2 {
-                        if set_value<10{
-                            output_enabled = false;
-                            message_queue.enqueue(PSUCommand::OutputOff);
-                            message_queue.enqueue(PSUCommand::SetVoltage(VOLTAGE_SET));
-                        }else if set_value<90{
-                            let current = (set_value as f32 - 10.0)/80.0 * CURRENT_MAX;
-                            if !output_enabled{
-                                output_enabled = true; // technically only when the message is sent...
-                                message_queue.enqueue(PSUCommand::OutputOn);
-                            }
-                            message_queue.enqueue(PSUCommand::SetCurrent(current));
-                        }else {
-                            if !output_enabled{
-                                output_enabled = true; // technically only when the message is sent...
-                                message_queue.enqueue(PSUCommand::OutputOn);
-                            }
-                            message_queue.enqueue(PSUCommand::SetCurrent(CURRENT_MAX));
+        let duty_cycle = unsafe{PULSE_METER.duty_cycle()};
+        
+        debouncer.push(duty_cycle);
+        if debouncer.all_same() || overdue_for_set {
+            if set_value!=duty_cycle || overdue_for_set {
+                set_value = duty_cycle;
+                ticks_since_last_update = 0;
+                if message_queue.space() >=2 {
+                    if set_value<10 {
+                        output_enabled = false;
+                        message_queue.enqueue(PSUCommand::OutputOff);
+                        message_queue.enqueue(PSUCommand::SetCurrent(0.1));
+                        message_queue.enqueue(PSUCommand::SetVoltage(VOLTAGE_SET));
+                    } else if set_value<90 {
+                        let current = (set_value as f32 - 10.0)/80.0 * CURRENT_MAX;
+                        message_queue.enqueue(PSUCommand::SetCurrent(current));
+                        if !output_enabled{
+                            output_enabled = true; // technically only when the message is sent...
+                            message_queue.enqueue(PSUCommand::OutputOn);
                         }
+                    } else {
+                        if !output_enabled{
+                            output_enabled = true; // technically only when the message is sent...
+                            message_queue.enqueue(PSUCommand::OutputOn);
+                        }
+                        message_queue.enqueue(PSUCommand::SetCurrent(CURRENT_MAX));
                     }
-                    
                 }
             }
         }
-
+        
+        
+        ticks_since_last_send +=1;
         if ticks_since_last_send >= MIN_TICKS_BETWEEN_SEND {
             ticks_since_last_send = MIN_TICKS_BETWEEN_SEND; // try prevent idle overflow
             message_queue.dequeue().map(|message|{

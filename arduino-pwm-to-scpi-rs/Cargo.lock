@@ -16,18 +16,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arduino-pwm-to-scpi"
-version = "0.1.0"
-dependencies = [
- "arduino-hal",
- "avr-device",
- "embedded-hal 1.0.0",
- "nb 1.1.0",
- "panic-halt",
- "ufmt",
-]
-
-[[package]]
 name = "atmega-hal"
 version = "0.1.0"
 source = "git+https://github.com/rahix/avr-hal?rev=fafaf587a32a4500239fd073f89d1b9c36b48092#fafaf587a32a4500239fd073f89d1b9c36b48092"
@@ -82,6 +70,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fe8f5a8a398345e52358e18ff07cc17a568fbca5c6f73873d3a62056309603"
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -124,6 +118,39 @@ name = "embedded-storage"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "723dce4e9f25b6e6c5f35628e144794e5b459216ed7da97b7c4b66cdb3fa82ca"
+
+[[package]]
+name = "firmware"
+version = "0.1.0"
+dependencies = [
+ "arduino-hal",
+ "avr-device",
+ "embedded-hal 1.0.0",
+ "heapless",
+ "nb 1.1.0",
+ "panic-halt",
+ "ufmt",
+]
+
+[[package]]
+name = "hash32"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
+name = "heapless"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bfb9eb618601c89945a70e254898da93b13be0388091d42117462b265bb3fad"
+dependencies = [
+ "hash32",
+ "stable_deref_trait",
+ "ufmt-write",
+]
 
 [[package]]
 name = "nb"
@@ -169,6 +196,12 @@ checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "stable_deref_trait"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "syn"

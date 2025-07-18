@@ -1,19 +1,16 @@
 [package]
-name = "arduino-pwm-to-scpi"
+name = "firmware"
 version = "0.1.0"
 authors = ["thehappycheese"]
 edition = "2024"
-license = "MIT OR Apache-2.0"
 
 [dependencies]
-panic-halt = "1.0.0"
 ufmt = "0.2.0"
 nb = "1.1.0"
-embedded-hal = "1.0"
-
-[dependencies.avr-device]
-version = "0.7.0"
-features =["atmega328p"]
+embedded-hal = "1.0.0"
+heapless = {version="0.8.0",features=["ufmt"]}
+panic-halt = "1.0.0"
+avr-device = {version="0.7.0", features=["atmega328p"]}
 
 [dependencies.arduino-hal]
 git = "https://github.com/rahix/avr-hal"

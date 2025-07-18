@@ -1,4 +1,4 @@
-use crate::ring_buffer::RingBuffer;
+use crate::shared::ring_buffer::RingBuffer;
 use arduino_hal::simple_pwm::Prescaler;
 
 
@@ -40,11 +40,11 @@ impl PulseMeter {
         //       1 -           Trigger on Rising Edge
         dp.TC1.tccr1b.write(|w| {
             match self.prescaler {
-                Prescaler::Direct   =>w.cs1().direct(),
-                Prescaler::Prescale8=>w.cs1().prescale_8(),
-                Prescaler::Prescale64=>w.cs1().prescale_64(),
-                Prescaler::Prescale256=>w.cs1().prescale_256(),
-                Prescaler::Prescale1024=>w.cs1().prescale_1024()
+                Prescaler::Direct       => w.cs1().direct(),
+                Prescaler::Prescale8    => w.cs1().prescale_8(),
+                Prescaler::Prescale64   => w.cs1().prescale_64(),
+                Prescaler::Prescale256  => w.cs1().prescale_256(),
+                Prescaler::Prescale1024 => w.cs1().prescale_1024(),
             }
             .icnc1().set_bit()
             .ices1().set_bit()
@@ -62,8 +62,8 @@ impl PulseMeter {
         let tc1 = unsafe { &(*arduino_hal::pac::TC1::ptr()) };
         let current_timestamp = tc1.icr1.read().bits();
 
-        macro_rules! switch_to_rising_edge_detection {($tc1:expr) => { $tc1.tccr1b.modify(|_, w| w.ices1().set_bit()) }}
-        macro_rules! switch_to_falling_edge_detection {($tc1:expr) => { $tc1.tccr1b.modify(|_, w| w.ices1().clear_bit()) }}
+        macro_rules! switch_to_rising_edge_detection  {($tc1:expr)=>{$tc1.tccr1b.modify(|_, w| w.ices1().set_bit()  )}}
+        macro_rules! switch_to_falling_edge_detection {($tc1:expr)=>{$tc1.tccr1b.modify(|_, w| w.ices1().clear_bit())}}
 
         match self.state {
             PulseState::WaitingForRisingEdge => {
@@ -84,8 +84,8 @@ impl PulseMeter {
         }
     }
 
-    pub fn duty_cycle_2(&self) -> Option<u16>{
-        let result = self.ring_buffer.average().map(|v|v+1);
+    pub fn duty_cycle(&self) -> u16{
+        let result = self.ring_buffer.average().map(|v|v+1).unwrap_or(0);
         return result;
     }
 }
