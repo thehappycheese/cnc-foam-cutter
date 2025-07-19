@@ -23,13 +23,20 @@ class WingSegment:
     length:float
 
     def __repr__(self) -> str:
-        return f"<AirfoilPair length={self.length:.1f} left={self.left} right={self.right} />"
+        return f"<WingSegment length={self.length:.1f} left={self.left} right={self.right} />"
 
     def with_translation(self, translation:ArrayLike) -> WingSegment:
         return replace(
             self,
             left  = self.left .with_translation(translation),
             right = self.right.with_translation(translation),
+        )
+    
+    def with_mirror(self) -> WingSegment:
+        return replace(
+            self,
+            left =self.right,
+            right=self.left,
         )
 
     def bounding_size(self):

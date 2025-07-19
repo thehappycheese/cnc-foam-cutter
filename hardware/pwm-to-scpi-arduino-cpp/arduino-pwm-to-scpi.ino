@@ -46,7 +46,7 @@ volatile unsigned long period = 0;
 volatile bool newPulseData = false;
 
 // Sampling and averaging variables
-const int NUM_SAMPLES = 10;
+const int NUM_SAMPLES = 5;
 float duty_cycle_samples[NUM_SAMPLES];
 int sampleIndex = 0;
 unsigned long lastSampleTime = 0;

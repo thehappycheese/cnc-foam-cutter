@@ -1,0 +1,12 @@
+[project]
+name="cnc-hot-wire-tools"
+version="0.1.0"
+authors =[{name="thehappycheese@github"}]
+keywords = ["CNC"," Hot Wire", "4 Axis", "Hot Wire Foam Cutting", "Airfoil", "Wing", "Aircraft"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/airfoil"]
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"

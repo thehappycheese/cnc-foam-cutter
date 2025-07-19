@@ -58,6 +58,18 @@ class CNC:
         """G90"""
         return self.writeln("G90")
     
+    def set_current(self, current:float):
+        MAX = 4
+        MIN = 0.1
+        if current<MIN:
+            print("M3 S5")
+            return self.writeln("M3 S5")
+        
+        portion = (current-MIN)/(MAX-MIN)
+        pwm_percent = (portion*0.8+0.1)*100
+        print(f"M3 S{pwm_percent:.0f}")
+        return self.writeln(f"M3 S{pwm_percent:.1f}")
+    
     def home(self):
         return self.writeln("$H")
     

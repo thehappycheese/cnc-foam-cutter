@@ -1,8 +1,0 @@
-ipykernel>=6.29.0
-numpy>=2.3.0
-pandas>=2.3.0
-pyvista[all,trame]>=0.45.0
-shapely>=2.1.0
-scipy>=1.15.0
-pyserial>=3.5
-scikit-learn>=1.7.0
