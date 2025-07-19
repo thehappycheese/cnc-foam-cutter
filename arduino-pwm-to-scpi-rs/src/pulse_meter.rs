@@ -1,4 +1,4 @@
-use crate::shared::ring_buffer::RingBuffer;
+use crate::ring_buffer::RingBuffer;
 use arduino_hal::simple_pwm::Prescaler;
 
 
@@ -11,17 +11,18 @@ enum PulseState {
 pub struct PulseMeter {
     state: PulseState,
     prescaler:Prescaler,
-    ring_buffer: RingBuffer<32>
+    ring_buffer: RingBuffer<32>,
+    overflow_counter:u8,
 }
 
 impl PulseMeter {
 
-    #[inline(always)]
     pub const fn new(prescaler:Prescaler) -> Self {
         Self {
             state: PulseState::WaitingForRisingEdge,
             prescaler,
-            ring_buffer:RingBuffer::new()
+            ring_buffer:RingBuffer::new(),
+            overflow_counter: 0
         }
     }
 
@@ -50,8 +51,11 @@ impl PulseMeter {
             .ices1().set_bit()
         });
         
-        // Enable Input Capture interrupt
-        dp.TC1.timsk1.write(|w| w.icie1().set_bit());
+        
+        dp.TC1.timsk1.write(|w| 
+            w.icie1().set_bit() // Enable Input Capture interrupt
+            .toie1().set_bit()  // Enable Overflow interrupt
+        );
     
         // Enable global interrupts
         unsafe { avr_device::interrupt::enable() };
@@ -77,6 +81,7 @@ impl PulseMeter {
             }
             PulseState::WaitForEndOfPeriod { rising_edge_timestamp, width } => {
                 switch_to_falling_edge_detection!(tc1);
+                self.overflow_counter = 0;
                 let period = current_timestamp.wrapping_sub(rising_edge_timestamp);
                 self.ring_buffer.push(((width as u32*100)/period as u32) as u16);
                 self.state = PulseState::WaitingForFallingEdge { rising_edge_timestamp: current_timestamp }
@@ -84,8 +89,16 @@ impl PulseMeter {
         }
     }
 
+    #[inline(always)]
+    pub unsafe fn handle_overflow(&mut self){
+        self.overflow_counter = (self.overflow_counter + 1).min(8);
+    }
+
     pub fn duty_cycle(&self) -> u16{
-        let result = self.ring_buffer.average().map(|v|v+1).unwrap_or(0);
-        return result;
+        if self.overflow_counter<4 {
+             self.ring_buffer.average().map(|v|v+1).unwrap_or(0)
+        } else{
+            0
+        }
     }
 }

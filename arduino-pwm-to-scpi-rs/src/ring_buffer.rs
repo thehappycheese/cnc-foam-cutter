@@ -1,6 +1,4 @@
 
-
-
 pub struct RingBuffer<const N: usize> {
     buffer: [u16; N],
     head: u8,

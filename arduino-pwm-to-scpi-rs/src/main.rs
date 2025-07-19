@@ -4,16 +4,20 @@
 #![no_std]
 #![no_main]
 
+pub mod float_format;
+use float_format::format_float_2dp;
+
+pub mod messaging;
+use messaging::PSUCommand;
+
+pub mod queue;
+use queue::FixedQueue;
+
+pub mod ring_buffer;
+use ring_buffer::RingBuffer;
+
 mod pulse_meter;
 use pulse_meter::PulseMeter;
-
-mod shared;
-use shared::{
-    messaging::PSUCommand,
-    queue::FixedQueue,
-    ring_buffer::RingBuffer,
-    float_format::format_float_2dp,
-};
 
 use arduino_hal::simple_pwm::Prescaler;
 use panic_halt as _;
@@ -26,7 +30,6 @@ const CURRENT_MAX:f32 = 4.0;
 const VOLTAGE_SET:f32 = 20.0;
 
 static mut PULSE_METER:PulseMeter = PulseMeter::new(Prescaler::Prescale8);
-
 
 
 #[arduino_hal::entry]
@@ -108,7 +111,6 @@ fn main() -> ! {
                     },
                     PSUCommand::SetCurrent(current)=>{
                         let printed = format_float_2dp(current);
-                        
                         ufmt::uwrite!(
                             &mut serial,
                             "ISET1:{}",
@@ -126,7 +128,6 @@ fn main() -> ! {
                 }
             });
         }
-
         arduino_hal::delay_ms(TICK_INTERVAL_MS as u32);
     }
 }
@@ -134,4 +135,9 @@ fn main() -> ! {
 #[avr_device::interrupt(atmega328p)]
 fn TIMER1_CAPT() {
     unsafe {PULSE_METER.handle_capture();}
+}
+
+#[avr_device::interrupt(atmega328p)]
+fn TIMER1_OVF() {
+    unsafe {PULSE_METER.handle_overflow();}
 }

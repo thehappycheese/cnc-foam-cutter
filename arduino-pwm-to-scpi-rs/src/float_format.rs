@@ -1,5 +1,6 @@
+use heapless::String;
+
 pub fn format_float_2dp(value: f32) -> heapless::String<16> {
-    use heapless::String;
    
     let mut result = String::new();
    
