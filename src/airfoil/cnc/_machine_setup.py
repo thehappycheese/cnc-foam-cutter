@@ -153,8 +153,8 @@ class MachineSetup:
         ab_all = np.concat([a,b], axis=0)
         max_y_lead_in_out = np.max(ab_all, axis=0)[1]
         li = np.array([
-            [                 0,                  0 ],
-            [                -5,                  0 ],
+            [                 0,    self.foam_height ],
+            [                -5,    self.foam_height ],
             [                -5, self.foam_height+20 ],
             [ self.foam_depth+5, self.foam_height+20 ],
             [ max(self.foam_depth+5, max_y_lead_in_out+5), self.foam_height/2 ],

@@ -190,3 +190,44 @@ class CNC:
     
     def set_or_raise(self, setting:str, value:str):
         assert self.writeln(f"${setting}={value}").strip()=="ok", f"failed to set ${setting}={value}"
+
+    def send_gcode_lines(self, gcode:list[str], timeout_seconds=5):
+        """lines should not be terminated with `"\r\n"` as this will be automatically added"""
+        log = ""
+        time.sleep(0.1)
+        self.read_all()
+        time.sleep(0.1)
+        self.read_all()
+        time.sleep(0.1)
+        success = True
+        for gc in gcode:
+            command = (gc+"\r\n").encode("ascii")
+            self.serial.write(command)
+            log += command.decode("ascii")
+
+            response = ""
+            start_time = time.time()
+            while "ok\r\n" not in response:
+                if self.serial.in_waiting:
+                    new_data = self.serial.read(self.serial.in_waiting).decode("ascii")
+                    response += new_data
+                    log      += new_data
+                
+                # Check for timeout
+                if time.time() - start_time > timeout_seconds:
+                    print(f"Timeout waiting for 'ok' after command: {gc.strip()}")
+                    success = False
+                    break
+                    
+                # Small delay to prevent CPU hogging
+                time.sleep(0.01)
+            if not success:
+                break
+        if not success:
+            # cnc.alarm_clear()
+            # cnc.alarm_soft_reset()
+            # cnc.alarm_clear()
+            # cnc.alarm_soft_reset()
+            log+="FAILED\r\n"
+            self.serial.write("M3 S0\r\n".encode("ascii"))
+        return log
