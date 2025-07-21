@@ -10,25 +10,61 @@ from airfoil.util.array_helpers import blur1d, map_to_range, remove_sequential_d
 
 from .cnc_machine_mesh import axis
 from ..util.pyvista_helpers import create_ruled_surface
-from ..util.path_planning import (
-    project_line_to_plane,
-    ensure_closed,
+from ..util.path_planning import project_line_to_plane
+from airfoil.util.linestring_helpers import (
+    deflection_angle_padded,
+    resample_linear_to_segment_length,
+    ensure_closed
 )
-from airfoil.util.linestring_helpers import deflection_angle_padded, resample_linear_to_segment_length
 from dataclasses import dataclass, replace, field
 from .._WingSegment import WingSegment
 
 @dataclass
 class MachineSetup:
-    wing_segment:WingSegment
-    foam_width :float
-    foam_depth :float
-    foam_height:float
-    plane_spacing:float
-    decomposer:Decomposer = field(default_factory=lambda:Decomposer())
-    max_cut_speed_mm_s:float = 300
-    min_cut_speed_mm_s:float = 230
-    travel_speed:float       = 1000
+    r"""
+    - Workpiece / Foam Block
+      - Bottom corner of the foam is at `(0,0,0,0)`,
+      - Top corner is at `(foam_depth,foam_height,foam_depth,foam_height)`.
+      - The width of the foam in the direction of the wire is `foam_width`
+        (this should match wing_segment.length TODO: add assert that checks this)
+    - Machine Configuration
+      - The two control heads of the machine guide the hot wire
+      - each move on their own of two parallel planes
+      - the planes are separated by `plane_spacing`
+    
+    Coordinates for the hot wire control heads are given (x,y,a,z)
+
+    Hot wire must start positioned at `(0,foam_height,0,foam_height)` which is the top front edge of the foam.
+    ```text
+    │\                         │\        
+    │ \                        │ \       
+    │  \                       │  \      
+    │   \                      │   \     
+    │    \                     │    \    
+    │     \        foam        │     \   
+    │      \     ┌─────┐       │      \  
+    │       \    |\     \      │       \ 
+    │        │   \ \     \     │        │
+     \       │    \ \     \     \       │
+      \      │     \ \     \     \      │
+       \   ──│────────┬─────┬─────────  │ <-- hot wire
+        \    │        └─────┘      \    │
+         \   │                      \   │
+         Z\  │↑                     X\  │↑
+           \ │A                       \ │Y
+            \                          \
+                  ←--plane spacing--→
+    ```
+    """
+    wing_segment       : WingSegment
+    foam_width         : float
+    foam_depth         : float
+    foam_height        : float
+    plane_spacing      : float
+    decomposer         : Decomposer = field(default_factory=lambda:Decomposer())
+    max_cut_speed_mm_per_min : float = 300
+    min_cut_speed_mm_per_min : float = 230
+    travel_speed_mm_per_min  : float = 1000
     
     def with_recentered_part(self):
         foam_center = np.array([
@@ -139,8 +175,8 @@ class MachineSetup:
                 count=31,
                 std=6
             ),
-            self.max_cut_speed_mm_s,
-            self.min_cut_speed_mm_s
+            self.max_cut_speed_mm_per_min,
+            self.min_cut_speed_mm_per_min
         )
         speed_multiplier = (
              (np.linalg.norm(np.diff(afa_projected))/np.linalg.norm(np.diff(a)))
@@ -167,7 +203,7 @@ class MachineSetup:
         instrucitons = np.concat([
             np.concat(
                 [
-                    np.full((len(li),1), self.travel_speed),
+                    np.full((len(li),1), self.travel_speed_mm_per_min),
                     li,
                     li
                 ],
@@ -176,7 +212,7 @@ class MachineSetup:
             np.concat([speed.reshape(-1,1), a[:,1:], b[:,1:]], axis=-1),
             np.concat(
                 [
-                    np.full((len(lo),1), self.travel_speed),
+                    np.full((len(lo),1), self.travel_speed_mm_per_min),
                     lo,
                     lo
                 ],
@@ -200,3 +236,18 @@ class MachineSetup:
             file.write_text(rec)
 
         return instrucitons
+    
+    def generate_gcode(self):
+        result:list[str] = [
+            "; MachineSetup.generate_gcode",
+        ]
+        coords = self.instructions()
+        for op in ops:
+            result.append(f"M3 S{current_to_spindle(op.current):.2f}")
+            speed = op.speed*np.sqrt(2)
+            for x,y in op.move:
+                result.append(f"G1 F{speed:.0f} X{x:.2f} Y{y:.2f} Z{x:.2f} A{y:.2f}")
+            if op.pause_after_ms>0:
+                result.append(f"M3 S{current_to_spindle(op.pause_after_current):.2f}")
+                result.append(f"G4 P{op.pause_after_ms/1000:.3f}")
+        result.append(f"M3 S0")

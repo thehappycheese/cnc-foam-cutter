@@ -60,7 +60,7 @@ class CNC:
     
     def set_current(self, current:float):
         MAX = 4
-        MIN = 0.1
+        MIN = 0
         if current<MIN:
             print("M3 S5")
             return self.writeln("M3 S5")
