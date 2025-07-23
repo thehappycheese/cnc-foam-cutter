@@ -191,7 +191,7 @@ class CNC:
     def set_or_raise(self, setting:str, value:str):
         assert self.writeln(f"${setting}={value}").strip()=="ok", f"failed to set ${setting}={value}"
 
-    def send_gcode_lines(self, gcode:list[str], timeout_seconds=5):
+    def send_gcode_lines(self, gcode:list[str], timeout_seconds=20):
         """lines should not be terminated with `"\r\n"` as this will be automatically added"""
         log = ""
         time.sleep(0.1)
@@ -217,12 +217,12 @@ class CNC:
                 if time.time() - start_time > timeout_seconds:
                     print(f"Timeout waiting for 'ok' after command: {gc.strip()}")
                     success = False
-                    break
+                    #break
                     
                 # Small delay to prevent CPU hogging
                 time.sleep(0.01)
-            if not success:
-                break
+            # if not success:
+            #     break
         if not success:
             # cnc.alarm_clear()
             # cnc.alarm_soft_reset()

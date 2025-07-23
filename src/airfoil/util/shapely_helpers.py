@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
+import shapely as sh
 from shapely.geometry.base import BaseGeometry
 from shapely.plotting import plot_line,plot_points, plot_polygon
 
@@ -141,54 +142,56 @@ def plot_shapely_directional(
     handles = []
     labels = []
     
-    def get_direction_angle(p1, p2):
+    def get_direction_angle(p1:sh.Point, p2:sh.Point):
         """Calculate angle in radians for direction from p1 to p2"""
-        dx = p2[0] - p1[0]
-        dy = p2[1] - p1[1]
+        dx = p2.x - p1.x
+        dy = p2.y - p1.y
         return np.arctan2(dy, dx)
     
-    def plot_directional_markers(coords, color, part_label=""):
-        """Plot directional markers along a coordinate sequence"""
-        coords = list(coords)
-        if len(coords) < 2:
-            return
+    def plot_directional_markers(ls:sh.LineString, color, part_label=""):
         
         # End marker (empty circle)
-        end_x, end_y = coords[-1]
+        end_x, end_y = ls.coords[-1]
         ax.plot(end_x, end_y, marker=(5, 0, 0), fillstyle='none', markersize=15, 
                 markeredgecolor=color, markerfacecolor='white', markeredgewidth=1, 
                 linestyle='None', zorder=8)
         
         # Start marker (right-pointing triangle)
-        start_x, start_y = coords[0]
+        start_x, start_y = ls.coords[0]
         ax.plot(start_x, start_y, marker=(5, 0, 0), markersize=8, 
                 markerfacecolor=color, markeredgecolor='white', markeredgewidth=1, 
                 linestyle='None', zorder=100)
         
         # Directional arrows along the path
-        for i in range(1, len(coords) - 1, arrow_spacing):
-            if i >= len(coords):
-                break
+        
+        for i in np.linspace(0,ls.length,max(4, int(ls.length//arrow_spacing)))[1:-1]:
             
             # Get direction from previous to next point
-            prev_pt = coords[i-1]
-            curr_pt = coords[i]
-            next_pt = coords[i+1] if i+1 < len(coords) else coords[i]
+            pnt:sh.Point = ls.line_interpolate_point(i)
+            pnt1:sh.Point = ls.line_interpolate_point(i+0.001)
+            
             
             # Calculate direction angle and convert to degrees
-            angle = get_direction_angle(prev_pt, next_pt)
-            angle_degrees = np.degrees(angle) + 90  # +90 to match original orientation
+            angle = get_direction_angle(pnt, pnt1)
+            angle_degrees = np.degrees(angle)-90
             
             # Create rotated triangle arrow
-            x, y = curr_pt
-            ax.plot(x, y, marker=(3, 0, angle_degrees), markersize=9, 
-                    markerfacecolor=color, markeredgecolor=color, markeredgewidth=0.5, 
-                    linestyle='None', zorder=10)
+            ax.plot(
+                pnt.x, 
+                pnt.y, 
+                marker=(3, 0, angle_degrees), 
+                markersize=9, 
+                markerfacecolor=color, 
+                markeredgecolor=color, 
+                markeredgewidth=0.5, 
+                linestyle='None', 
+                zorder=10
+            )
         
         # Add part label if provided
         if part_label:
             mid_idx = 0
-            mid_x, mid_y = coords[mid_idx]
+            mid_x, mid_y = ls.coords[mid_idx]
             ax.annotate(
                 part_label,
                 xy=(mid_x,mid_y),
@@ -231,7 +234,7 @@ def plot_shapely_directional(
                 # Plot the line first
                 artists = plot_line(shp, ax, color=color, linewidth=2, label=label)
                 fix_shapely_markers(artists, color)
-                plot_directional_markers(shp.coords, color)
+                plot_directional_markers(sh.LineString(shp.coords), color)
                 
                 # Get handle for legend (first artist if tuple, otherwise the artist itself)
                 handle = artists[0] if isinstance(artists, tuple) else artists
@@ -246,11 +249,11 @@ def plot_shapely_directional(
                 fix_shapely_markers(artists, color)
                 
                 # Plot exterior boundary with direction
-                plot_directional_markers(shp.exterior.coords, color)
+                plot_directional_markers(sh.LineString(shp.exterior.coords), color)
                 
                 # Plot interior boundaries (holes) with part labels
                 for j, interior in enumerate(shp.interiors):
-                    plot_directional_markers(interior.coords, color, f"H{j}")
+                    plot_directional_markers(sh.LineString(interior.coords), color, f"H{j}")
                 
                 # Get handle for legend (first artist if tuple, otherwise the artist itself)
                 handle = artists[0] if isinstance(artists, tuple) else artists
@@ -291,11 +294,11 @@ def plot_shapely_directional(
                         fix_shapely_markers(artists, color)
                     
                     # Plot exterior with part label
-                    plot_directional_markers(poly.exterior.coords, color, str(j))
+                    plot_directional_markers(sh.LineString(poly.exterior.coords), color, str(j))
                     
                     # Plot interior boundaries (holes) with part labels
                     for k, interior in enumerate(poly.interiors):
-                        plot_directional_markers(interior.coords, color, f"{j}H{k}")
+                        plot_directional_markers(sh.LineString(interior.coords), color, f"{j}H{k}")
             
             case "Point":
                 # Simple point plotting
