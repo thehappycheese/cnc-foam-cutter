@@ -34,6 +34,9 @@ class CNC:
     def alarm_soft_reset(self):
         return self.writeln("\x18")
     
+    def alarm_reset_clear(self):
+        return self.writeln("\x18\r\n$X")
+    
     def status(self)->str:
         return self.writeln("?")[:-6]
     
