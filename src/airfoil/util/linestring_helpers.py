@@ -55,6 +55,7 @@ def resample_long_segments(arr: np.ndarray, desired_length: float) -> np.ndarray
     Subdivide segments longer than max_length threshold.
     Original Points are undisturrbed so this keeps the exact original shape.
     """
+    arr = np.array(arr)
     n, d = arr.shape
     assert n > 1, "Need at least 2 points"
     
