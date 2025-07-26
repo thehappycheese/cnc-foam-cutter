@@ -22,12 +22,12 @@ use pulse_meter::PulseMeter;
 use arduino_hal::simple_pwm::Prescaler;
 use panic_halt as _;
 
-const TICK_INTERVAL_MS:u16 = 10;
+const TICK_INTERVAL_MS:u16           = 10;
 const MAX_TICKS_BETWEEN_UPDATE:u16   = 1000/TICK_INTERVAL_MS; // 1 second
 const MIN_TICKS_BETWEEN_UPDATE:usize = (20/TICK_INTERVAL_MS) as usize;
 const MIN_TICKS_BETWEEN_SEND:u16     = 50/TICK_INTERVAL_MS;
-const CURRENT_MAX:f32 = 4.0;
-const VOLTAGE_SET:f32 = 20.0;
+const CURRENT_MAX:f32                = 4.0;
+const VOLTAGE_SET:f32                = 20.0;
 
 static mut PULSE_METER:PulseMeter = PulseMeter::new(Prescaler::Prescale8);
 
@@ -55,15 +55,15 @@ fn main() -> ! {
     loop {
         ticks_since_last_update +=1;
         let overdue_for_set = ticks_since_last_update>=MAX_TICKS_BETWEEN_UPDATE;
-        if overdue_for_set{
-            ticks_since_last_update = MAX_TICKS_BETWEEN_UPDATE; // try prevent idle overflow
+        if overdue_for_set {
+            ticks_since_last_update = MAX_TICKS_BETWEEN_UPDATE; // prevent idle overflow
         }
         
         let duty_cycle = unsafe{PULSE_METER.duty_cycle()};
         
         debouncer.push(duty_cycle);
         if debouncer.all_same() || overdue_for_set {
-            if set_value!=duty_cycle || overdue_for_set {
+            if set_value!=duty_cycle || overdue_for_set { // TODO: this can be reduced to a single if statement
                 set_value = duty_cycle;
                 ticks_since_last_update = 0;
                 if message_queue.space() >=2 {
@@ -93,7 +93,7 @@ fn main() -> ! {
         
         ticks_since_last_send +=1;
         if ticks_since_last_send >= MIN_TICKS_BETWEEN_SEND {
-            ticks_since_last_send = MIN_TICKS_BETWEEN_SEND; // try prevent idle overflow
+            ticks_since_last_send = MIN_TICKS_BETWEEN_SEND; // prevent idle overflow
             message_queue.dequeue().map(|message|{
                 ticks_since_last_send=0;
                 match message {
