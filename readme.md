@@ -65,7 +65,14 @@ af = (
 ```python
 from airfoil import Decomposer
 
-example_decomposer = Decomposer()
+# create a decomposer that will add a 0.5mm buffer
+# holes are buffered inward, the perimeter is buffered outwards, the hole is subtracted,
+# and a cut is added to the upper surface of the airfoil
+example_decomposer = Decomposer(buffer=0.5)
+
+
+my_airfoil = Airfoil.from_naca_designation("0012")
+linstrings:list[np.ndarray[n,2]] = example_decomposer.decompose(my_airfoil)
 ```
 
 - `Decomposer` is a collection of stateful helper functions that
@@ -91,13 +98,11 @@ example_decomposer = Decomposer()
 # `util`
 
 ```python
-from airfoil.util.array_helpers      import (
+from airfoil.util import (
   remove_sequential_duplicates, # reduce contiguous runs of duplicates to a single occurrence
   blur1d, # smear/smooth values by applying a gaussian convolution
   map_to_range, # scale and translate array values to fall within specified minimum and maximum
   create_array_interpolator # similar to np.interp except the interolation can occur between multidimentional arrays. (who knows why numpy doesn't just support this directly?)
-)
-from airfoil.util.linestring_helpers import (
   is_ccw, # tests if a list of coordinates is counterclockwise (same as shapely.is_ccw except it operates on (n,2) numpy array)
   ensure_closed, # add an extra point to the end of a list of coordinates to close the loop only if needed
   split_linestring_by_angle,
@@ -110,20 +115,12 @@ from airfoil.util.linestring_helpers import (
   split_and_roll,
   split_and_roll_at_top_right,
   resample_shapes,
-)
-from airfoil.util.path_planning import ...
-from airfoil.util.pyvista_helpers import (
   create_ruled_surface,
   mesh_from_polygon, # creates a triangulated pyvista mesh from a shapely polygon
   make_mesh_from_side_surfaces, # loft defined between two 2d polygons and a distance. TODO: possibly rename
-
-)
-from airfoil.util.shapely_helpers import (
   plot_shapely_directional, # plot list of geometries using matplotlib with arrow linestring direction indicators.
   shapely_to_svg, # list of geometries to full SVG document TODO: why is this not just built into shapely
-  
 )
-from airfoil.util.functools import compose # TODO: may be unused
 ```
 
 - `airfoil.util`

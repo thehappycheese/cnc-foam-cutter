@@ -1,8 +1,18 @@
 [project]
 name="cnc-hot-wire-tools"
-version="0.1.0"
+version="0.2.0"
 authors =[{name="thehappycheese@github"}]
 keywords = ["CNC"," Hot Wire", "4 Axis", "Hot Wire Foam Cutting", "Airfoil", "Wing", "Aircraft"]
+
+dependencies = [
+    "pandas~=2.2.0",
+    "scipy~=1.15.0",
+    "matplotlib~=3.10.0",
+    "shapely~=2.1.0",
+    "pyvista~=0.45.0",
+    "pydantic~=2.11.0"
+]
+requires-python = "~=3.13"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/airfoil"]
