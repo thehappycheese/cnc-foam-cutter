@@ -2,31 +2,36 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from airfoil._airfoil import Airfoil
-from airfoil.util.array_helpers import remove_sequential_duplicates
-from airfoil.util.linestring_helpers import (
-    resample_linear_to_number_of_segments,
+
+from .util import (
+    remove_sequential_duplicates,
     split_linestring_by_angle,
     resample_spline_fallback_linear,
 )
 
-
 import numpy as np
-from scipy.interpolate import make_splprep
 from shapely import Point, difference, geometry, unary_union
 
-
-from dataclasses import dataclass
 from warnings import warn
+from pydantic import BaseModel, Field, PrivateAttr
 
 
-@dataclass
-class Decomposer:
-    upcut_kerf            :float          = 0.01
-    buffer                :float          = 0
-    tolerance             :float          = 0.05
-    split_angle_deg       :float          = 70
-    segment_target_length :float          = 1.0
-    _length_counts        :list[int]|None = None
+class Decomposer(BaseModel):
+    """This object takes a pair of Airfoil objects (or just one Airfoil) and breaks the path into evenly spaced points.
+    
+    This means that if you interpolate the resulting paths (by point index, not distance), you can sweep out a clean
+    ruled surface without skewing the hot wire.
+    
+    Repeated use of the same Decomposer object will attempt to produce the same number of points on each corresponding
+    segment of the airfoil outline. A threshold angle is used to break the outline into segments at some deflection
+    angle."""
+    upcut_kerf                  :float          = 0.01
+    buffer                      :float          = 0
+    tolerance                   :float          = 0.001
+    split_angle_deg             :float          = 70
+    segment_target_length       :float          = 1.0
+    minimum_initial_point_count :int            = 200
+    _length_counts              :list[int]|None = PrivateAttr(default_factory=lambda:None, init=False)
 
     def clone(self):
         import copy
@@ -67,6 +72,10 @@ class Decomposer:
             airfoil.polygon().simplify(tolerance=self.tolerance).buffer(self.buffer),
             unary_union(shape_holes+shape_upcuts+shape_hinges)
         )
+        if lsb.geom_type == "MultiPolygon":
+            raise ValueError("Airfoil shape did not generate properly (split into multi-polygon), this often happens if the Hole or Hinge features have split the airfoil into two parts which is not allowed. Try .plot_raw(show_hinge=True, show_holes=True) to diagnose.")
+        if lsb.is_empty:
+            raise ValueError("Airfoil shape did not generate properly (empty), this might have happened if the Hole or Hinge features entirely covered the airfoil shape. Try .plot_raw(show_hinge=True, show_holes=True) to diagnose.")
         lsb = np.array(lsb.boundary.coords)
         lsb = np.roll(lsb,-(lsb[:,0]+lsb[:,1]).argmax()-1, axis=0)[::-1]
 
@@ -80,10 +89,14 @@ class Decomposer:
         chunks = upper_chunks+lower_chunks
 
         if self._length_counts is None:
+            actual_segment_target_length = self.segment_target_length
+            total_shape_length = np.linalg.norm(np.diff(np.concat(chunks, axis=0), axis=0), axis=1).sum()
+            if total_shape_length/self.segment_target_length<self.minimum_initial_point_count:
+                actual_segment_target_length = total_shape_length/self.minimum_initial_point_count
             result = [
                 resample_spline_fallback_linear(
                     chunk,
-                    lambda l: int(np.ceil(l/self.segment_target_length))
+                    lambda l: int(np.ceil(l/actual_segment_target_length))
                 )
                 for chunk in chunks
             ]

@@ -1,3 +1,4 @@
+from warnings import deprecated
 import numpy as np
 from typing import Callable
 
@@ -92,7 +93,7 @@ def ellipse_quadrant(rx:float, ry:float, x:float):
     theta = np.arccos(x/rx)
     return ry * np.sin(theta)
 
-def auto_interpolate(points):
+def auto_interpolate(points)->Callable[[float],float]:
     """Returns a new function that interpolates between a list of `n` points where
     `points` must be in the shape (n,2)
 
@@ -113,13 +114,14 @@ def auto_interpolate(points):
     """
     return lambda x: np.interp(x, *np.array(points).T)
 
+@deprecated("Use Airfoil.create_sampler instead")
 def create_airfoil_sampler(
     airfoil         : Callable[[float], Airfoil],
-    leading_edge    : Callable[[float], float],
-    dihedral        : Callable[[float], float],
-    chord           : Callable[[float], float],
-    washout         : Callable[[float], float],
-    rotation_center : Callable[[float], float],
+    leading_edge    : Callable[[float], float] = lambda x: 0,
+    dihedral        : Callable[[float], float] = lambda x: 0,
+    chord           : Callable[[float], float] = lambda x: 100,
+    washout         : Callable[[float], float] = lambda x: 0,
+    rotation_center : Callable[[float], float] = lambda x: 0,
 ) -> Callable[[float], Airfoil]:
     return lambda x: (
         airfoil(x)

@@ -91,6 +91,10 @@ class CNC:
         """
         return self.writeln(f"G1 F{rate} X{x} Y{y} Z{z} A{a}")
     
+    def dwel(self, time_seconds:float):
+        """G4 Px.x"""
+        return self.writeln(f"G4 P{time_seconds:.3f}")
+    
     def metric(self):
         return self.writeln("G21")
 

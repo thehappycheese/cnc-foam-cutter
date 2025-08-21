@@ -1,7 +1,9 @@
 from __future__ import annotations
-from dataclasses import dataclass, field, replace
-from typing import Literal
+from typing import Callable, Literal
 from pathlib import Path
+from warnings import deprecated
+
+from pydantic import BaseModel, Field
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -13,26 +15,42 @@ from shapely import LineString, Polygon, Point, constrained_delaunay_triangles, 
 
 import pyvista as pv
 
+from airfoil._pydantic_helper_types import NDArray
+
 from .naca import naca, naca4, naca5
-from .util.array_helpers import remove_sequential_duplicates
-from .util.linestring_helpers import ensure_closed, is_ccw
+from .util import (
+    remove_sequential_duplicates,
+    ensure_closed,
+    is_ccw
+)
 
 from ._Decomposer import Decomposer
 
-@dataclass
-class Hole:
+
+class Hole(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+        frozen=True
     diameter_mm:float
-    position:tuple[float,float]|np.ndarray
+    position:tuple[float,float]|NDArray
     def __post_init__(self):
         self.position = np.array(self.position)
         assert self.position.shape == (2,), "position must have shape `(2)`"
+
+    def with_position(self, position:tuple[float,float]|NDArray):
+        return Hole(
+            position=position,
+            diameter_mm=self.diameter_mm
+        )
     
     def to_polygon(self):
         return Point(self.position).buffer(self.diameter_mm/2)
 
-@dataclass
-class Hinge:
-    position: tuple[float,float]|np.ndarray
+class Hinge(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+        frozen=True
+    position: NDArray|tuple[float,float]
     angle_deg: float = 60
     rotation_deg: float = -20
     height: float = 300.0
@@ -41,6 +59,14 @@ class Hinge:
         self.position = np.array(self.position)
         assert self.position.shape == (2,), "upper_point must have shape `(2)`"
         assert 0 < self.angle_deg <= 180, "angle_deg must be between 0 and 180 degrees"
+
+    def with_position(self, position:tuple[float,float]|np.ndarray):
+        return Hinge(
+            position=position,
+            angle_deg=self.angle_deg,
+            height=self.height,
+            rotation_deg=self.rotation_deg,
+        )
     
     def to_polygon(self) -> Polygon:
         """Generate the equilateral triangle polygon based on parameters."""
@@ -71,17 +97,18 @@ class Hinge:
         
         return Polygon(triangle_points)
 
-@dataclass
-class Airfoil:
-    points:np.ndarray = field()
-    holes:list[Hole] = field(default_factory=list)
+
+class Airfoil(BaseModel):
+    class Config:
+        frozen=True
+        arbitrary_types_allowed = True
+
+    points:NDArray|list[tuple[float,float]]
+    holes:list[Hole] = Field(default_factory=list)
     hinge:Hinge|None = None
 
-    def __repr__(self) -> str:
-        size = np.max(self.points,axis=0) - np.min(self.points,axis=0)
-        return f"<Airfoil p={len(self.points)} h={len(self.holes)} w={size[0]:.1f} h={size[1]:.1f} />"
-    
     def __post_init__(self) -> None:
+        self.points = np.array(self.points)
         assert self.points.shape[1]==2, "points must have shape (n, 2)" 
         assert self.points.shape[0]>4, f"need more points. only got {len(self.points)=}"
         assert (self.points[0]==self.points[-1]).all(), "first and last point must be the same"
@@ -89,9 +116,13 @@ class Airfoil:
             self.points = self.points[::-1]
             if not is_ccw(self.points):
                 raise ValueError("Something is wrong with the input points. Not able to be sorted into a counterclockwise direction")
-        
+
+    def __repr__(self) -> str:
+        size = np.max(self.points,axis=0) - np.min(self.points,axis=0)
+        return f"<Airfoil p={len(self.points)} h={len(self.holes)} w={size[0]:.1f} h={size[1]:.1f} />"
+
     @classmethod
-    def from_upper_lower(
+    def _from_upper_lower(
         cls,
         upper:np.ndarray,
         lower:np.ndarray,
@@ -103,14 +134,15 @@ class Airfoil:
             selig,
             [average_terminator]
         ])
-        return Airfoil(selig)
+        return Airfoil(points=selig)
+    
     @classmethod
     def from_naca4(
             cls,
             max_camber:float,
             max_camber_position:float,
             max_thickness:float,
-            chord_length:float,
+            chord_length:float=1,
             points:int=100,
         ):
         upper, lower = naca4(
@@ -118,7 +150,7 @@ class Airfoil:
             max_camber_position=max_camber_position, 
             max_camber=max_camber,
         )(n=points)
-        return Airfoil.from_upper_lower(upper,lower).with_chord(chord_length)
+        return Airfoil._from_upper_lower(upper,lower).with_chord(chord_length)
     
     @classmethod
     def from_naca5(
@@ -127,7 +159,7 @@ class Airfoil:
         design_lift_coefficient: float,
         max_camber_position: float,
         max_thickness: float,
-        chord_length:float,
+        chord_length:float=1,
         points:int=100,
     ):
         upper, lower = naca5(
@@ -136,16 +168,23 @@ class Airfoil:
             max_camber_position=max_camber_position,
             max_thickness=max_thickness
         )(n=points)
-        return Airfoil.from_upper_lower(upper*chord_length, lower*chord_length)
+        return Airfoil._from_upper_lower(upper*chord_length, lower*chord_length)
     
     @classmethod
-    def from_naca_designation(cls, designation:str, chord_length:float, points:int=100):
+    def from_naca_designation(cls, designation:str, chord_length:float=1, points:int=100):
         upper, lower = naca(designation, points)
-        return Airfoil.from_upper_lower(upper*chord_length, lower*chord_length)
+        return Airfoil._from_upper_lower(upper*chord_length, lower*chord_length)
 
     @classmethod
-    def from_airfoiltools_website(cls, reference:str, cache_dir:Path|str|None=None) -> Airfoil:
+    def from_airfoiltools_website(
+        cls,
+        reference:str,
+        cache_dir:Path|str|None=None
+    ) -> Airfoil:
         """
+        Please be gentle with repeated requests to airfoiltools.com.
+        Try to cache your results etc.
+
         e.g. `Airfoil.from_airfoiltools_website("naca23012-il").with_scale((100,100))`
         is equivalent to `Airfoil.from_naca_designation("23012",chord_length=100)`
         
@@ -178,8 +217,31 @@ class Airfoil:
             points=ensure_closed(np.array([list(map(float, item.strip().replace("  ", " ").split(" "))) for item in coord_lines]))
         )
 
+    @classmethod
+    def create_sampler(
+        cls,
+        airfoil         : Callable[[float], Airfoil],
+        leading_edge    : Callable[[float], float] = lambda x: 0,
+        dihedral        : Callable[[float], float] = lambda x: 0,
+        chord           : Callable[[float], float] = lambda x: 100,
+        washout         : Callable[[float], float] = lambda x: 0,
+        rotation_center : Callable[[float], float] = lambda x: 0,
+    ) -> Callable[[float], Airfoil]:
+        return lambda x: (
+            airfoil(x)
+            .with_chord(chord(x))
+            .with_translation((-rotation_center(x),0))
+            .with_rotation(washout(x))
+            .with_translation((rotation_center(x),0))
+            .with_translation((-leading_edge(x), dihedral(x)))
+        )
+
     def with_holes(self, holes:list[Hole]) -> Airfoil:
-        return replace(self, holes=holes)
+        return Airfoil(
+            points = self.points,
+            holes  = holes,
+            hinge  = self.hinge,
+        )
     
     def with_hinge(self, hinge:Hinge|None, upper_thickness:float|None=None) -> Airfoil:
         if upper_thickness is not None and hinge is not None:
@@ -187,14 +249,19 @@ class Airfoil:
                 self.polygon(),
                 LineString([[hinge.position[0],-500],[hinge.position[0],500]])
             )
-            hinge = replace(
-                hinge,
-                position=np.array([
-                    hinge.position[0],
-                    np.array(shape.coords)[:,1].max()-upper_thickness,
-                ])
+            hinge = hinge.model_copy(
+                update={
+                    "position":np.array([
+                        hinge.position[0],
+                        np.array(shape.coords)[:,1].max()-upper_thickness,
+                    ])
+                }
             )
-        return replace(self, hinge=hinge)
+        return Airfoil(
+            points = self.points,
+            holes  = self.holes,
+            hinge  = hinge,
+        )
     
     def compute_chord(self)->float:
         """Naive measurement of chord by subtracting the minimum x coordinate from the maximum x coordinate"""
@@ -207,14 +274,11 @@ class Airfoil:
     def with_translation(self, translation:ArrayLike)->Airfoil:
         translation = np.array(translation)
         assert translation.shape==(2,), "Translation must be an ndarray of shape (2,)"
-        return replace(
-            self,
+        return Airfoil(
             points = self.points+translation.reshape(1,-1),
-            holes  = [replace(hole,position=hole.position+translation) for hole in self.holes],
-            hinge  = None if self.hinge is None else replace(
-                self.hinge, 
-                position=self.hinge.position + translation
-            ),
+            holes  = [hole.with_position(hole.position+translation) for hole in self.holes],
+            hinge  =  None if self.hinge is None else 
+                self.hinge.with_position(self.hinge.position + translation),
         )
     
     def with_rotation(self, rotation_deg:float)->Airfoil:
@@ -223,28 +287,27 @@ class Airfoil:
             [np.cos(rotation_rad), -np.sin(rotation_rad)],
             [np.sin(rotation_rad),  np.cos(rotation_rad)]
         ])
-        return replace(
-            self,
+        return Airfoil(
             points = self.points @ rotation_matrix,
-            holes  = [replace(hole, position=hole.position@rotation_matrix) for hole in self.holes],
-            hinge  = None if self.hinge is None else replace(
-                self.hinge,
-                upper_point  = self.hinge.position @ rotation_matrix,
-                rotation_deg = self.hinge.rotation_deg + rotation_deg
+            holes  = [hole.with_position(hole.position@rotation_matrix) for hole in self.holes],
+            hinge  = None if self.hinge is None else Hinge(
+                position     = self.hinge.position @ rotation_matrix,
+                rotation_deg = self.hinge.rotation_deg + rotation_deg,
+                angle_deg    = self.hinge.angle_deg,
+                height       = self.hinge.height,
             ),
         )
     
     def with_scale(self, scale:ArrayLike) -> Airfoil:
+        """TODO: Does not currently scale holes"""
         scale = np.array(scale)
         assert scale.shape==(2,), "Scale must be an ndarray of shape (2,)"
         scale_reshaped = scale.reshape(-1,2)
-        return replace(
-            self,
+        return Airfoil(
             points = self.points * scale_reshaped,
-            holes  = [replace(hole, position=hole.position*scale) for hole in self.holes],
-            hinge   = None if self.hinge is None else replace(
-                self.hinge,
-                upper_point = self.hinge.position * scale,
+            holes  = [hole.with_position(hole.position*scale) for hole in self.holes],
+            hinge  = None if self.hinge is None else self.hinge.with_position(
+                self.hinge.position * scale,
             )
         )
 
@@ -252,12 +315,28 @@ class Airfoil:
         from IPython.display import display
         display(LineString(self.points))
     
+    @deprecated("use to_linestring")
     def linestring(self) -> LineString:
         return LineString(self.points)
     
+    @deprecated("use to_polygon")
     def polygon(self) -> Polygon:
         return Polygon(self.points)
     
+    def to_linestring(self) -> LineString:
+        return LineString(self.points)
+    
+    def to_polygon(self) -> Polygon:
+        return Polygon(self.points)
+    
+    def to_dxf(self, decomposer:Decomposer|None=None) -> str:
+        from .util._dxf import array_to_dxf_string
+        if decomposer is None:
+            decomposer = Decomposer()
+        segments = decomposer.decompose(self)
+        return array_to_dxf_string(remove_sequential_duplicates(np.concat(segments)))
+
+
     def plot(
             self,
             ax:Axes|None=None,
@@ -332,4 +411,4 @@ class Airfoil:
     
     def bounding_center(self):
         return self.points.min(axis=1)+self.bounding_size()/2
-    
+

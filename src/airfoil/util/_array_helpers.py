@@ -1,7 +1,6 @@
 from collections import deque
 from itertools import islice, pairwise
 from typing import Generator, Iterable, Sequence, Callable
-
 import numpy as np
 from scipy import ndimage
 from scipy.signal.windows import gaussian
@@ -23,7 +22,7 @@ def split_indexable[T](arr:Sequence[T],indicies:list[int]) -> list[Sequence[T]]:
     return result
 
 
-def remove_sequential_duplicates[T](arr:Sequence[T]) -> Sequence[T]:
+def remove_sequential_duplicates[T](arr:np.ndarray) -> np.ndarray:
     last = arr[0]
     result = [last]
     for item in arr[1:]:
@@ -45,9 +44,11 @@ def map_to_range(values:np.ndarray, min:float, max:float):
     return (values-values.min())/current_range*target_range+min
 
 
+
+
 def create_array_interpolator[T](
-    arrays:list[tuple[float, np.ndarray[T]]]
-) -> Callable[[float], np.ndarray[T]]:
+    arrays:list[tuple[float, np.ndarray]]
+) -> Callable[[float], np.ndarray]:
     first_position = arrays[0][0]
     last_position = arrays[-1][0]
     def _inner_create_array_interpolator(f:float):

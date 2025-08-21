@@ -1,9 +1,9 @@
 import re
-from typing import Union, Callable
+from typing import Callable
 from ._naca4 import naca4
 from ._naca5 import naca5
 
-def parse_naca(designation: str) -> Callable:
+def _parse_naca(designation: str):
     """
     Parse NACA airfoil designation string and return appropriate airfoil generator function.
     
@@ -38,7 +38,7 @@ def parse_naca(designation: str) -> Callable:
     else:
         raise ValueError(f"Invalid NACA designation length: expected 4 or 5 digits, got {len(designation)} digits")
 
-def _parse_naca4(designation: str) -> Callable:
+def _parse_naca4(designation: str):
     """Parse 4-digit NACA designation"""
     if len(designation) != 4:
         raise ValueError(f"NACA 4-digit designation must be exactly 4 digits, got {len(designation)}")
@@ -177,5 +177,5 @@ def naca(designation: str, n_points: int = 200) -> tuple:
     Returns:
     - Tuple of (upper_surface, lower_surface) coordinate arrays
     """
-    airfoil_generator = parse_naca(designation)
+    airfoil_generator = _parse_naca(designation)
     return airfoil_generator(n_points)

@@ -129,14 +129,15 @@ class GCodeBuilder:
             self,
             xyza     : np.ndarray,
             feedrate : np.ndarray,
-            current  : np.ndarray|None=None
+            current  : np.ndarray|None=None,
+            compensate_feedrate:bool = False
         ):
         
         assert len(feedrate)==len(xyza)-1, "Length of `feedrate` must be one less than length of `xyza`"
         if current is not None:
             assert len(current) ==len(xyza)-1, "Length of `current` must be one less than length of `xyza`"
         
-        result:GCodeBuilder = self.travel(*xyza[0])
+        result:GCodeBuilder = self.absolute().travel(*xyza[0])
         last_feedrate = None
         last_current  = None
 
@@ -150,8 +151,11 @@ class GCodeBuilder:
             current  if current  is not None else [None]*(len(xyza) - 1),
         ):
             diff = current_position - last_position
-            feedrate_compensation = _compensate_feedrate(*diff)
-            next_feedrate = np.round(current_feedrate * feedrate_compensation*2)/2
+            if compensate_feedrate:
+                feedrate_compensation = _compensate_feedrate(*diff)
+                next_feedrate = np.round(current_feedrate * feedrate_compensation*2)/2
+            else:
+                next_feedrate = np.round(current_feedrate*2)/2
 
             if current_current is not None:
                 next_current = np.round(current_current*10)/10

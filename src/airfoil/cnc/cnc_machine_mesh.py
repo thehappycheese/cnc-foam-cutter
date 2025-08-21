@@ -1,9 +1,6 @@
 import pyvista as pv
 from typing import Literal
 
-from ._state_helpers import state_to_3d_points
-
-
 def carriage():
     noz = pv.Cone(
         center=(-1.2,0,0),
@@ -91,7 +88,10 @@ def draw_machine(x:float, y:float, z:float, a:float, spacing=220, pt:pv.Plotter|
         pt = pv.Plotter()
     pt.add_mesh(axa,color="white", opacity=opacity)
     pt.add_mesh(axb,color="white", opacity=opacity)
-    pt.add_mesh(pv.Line(*state_to_3d_points(x,y,z,a,spacing=spacing)),color="red")
+    pt.add_mesh(pv.Line(
+        (-spacing/2,x,y),
+        ( spacing/2,z,a),
+    ),color="red")
     pt.camera_position = [
         (+spacing/2,-1000,300),
         (0,150,80),

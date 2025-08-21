@@ -5,3 +5,4 @@ from ._airfoil import (
     Hole,
     Hinge
 )
+from ._Wing import Wing

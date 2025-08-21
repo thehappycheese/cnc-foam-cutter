@@ -2,9 +2,8 @@ from typing import Callable
 import numpy as np
 from scipy.interpolate import make_splprep
 
-from airfoil.util.array_helpers import (
+from airfoil.util._array_helpers import (
     remove_sequential_duplicates,
-    sliding_window,
     split_indexable
 )
 
@@ -24,7 +23,7 @@ def ensure_closed(values:np.ndarray):
 
 
 
-def split_linestring_by_angle(arr:np.ndarray, split_angle_deg:float=70)->list[np.ndarray]:
+def split_linestring_by_angle(arr:np.ndarray, split_angle_deg:float=70):
     arr_length, arr_dimentions = arr.shape
     assert arr_length>1
     assert arr_dimentions ==2
@@ -36,24 +35,11 @@ def split_linestring_by_angle(arr:np.ndarray, split_angle_deg:float=70)->list[np
         )[0]+1
     )
 
-    # angles = []
-    # lengths = []
-    # for [a,b,c] in sliding_window(arr, 3):
-    #     ba = (a-b)/np.linalg.norm(a-b)
-    #     cb = (b-c)/np.linalg.norm(b-c)
-    #     lengths.append(np.linalg.norm(a-b))
-    #     angles.append(np.acos(np.dot(ba, cb)))
-
-    # chunks = split_indexable(
-    #     arr,
-    #     np.where(abs(np.array(angles))>np.deg2rad(split_angle_deg))[0]+1
-    # )
-    # return chunks
 
 def resample_long_segments(arr: np.ndarray, desired_length: float) -> np.ndarray:
     """
     Subdivide segments longer than max_length threshold.
-    Original Points are undisturrbed so this keeps the exact original shape.
+    Original Points are undisturbed so this keeps the exact original shape.
     """
     arr = np.array(arr)
     n, d = arr.shape

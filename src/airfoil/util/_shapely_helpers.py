@@ -9,7 +9,9 @@ from shapely.plotting import plot_line,plot_points, plot_polygon
 from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 
+from warnings import deprecated
 
+@deprecated("use plot_shapely or plot_shapely_directional")
 def plot_shapely_simple(shps:list[BaseGeometry], ax:Axes|None=None):
     
     if ax is None:
@@ -102,7 +104,7 @@ def plot_shapely(shps: list[BaseGeometry], ax: Axes | None = None, legend: list[
     
     return ax
 
-
+@deprecated("Dont want to maintain this function here. Inline this code instead.")
 def shapely_to_svg(shapes:list[BaseGeometry], output:Path|str):
     output_path = Path(output)
     output_path.write_text("\n".join([

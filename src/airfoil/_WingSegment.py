@@ -1,42 +1,63 @@
 from __future__ import annotations
 from warnings import warn, deprecated
-from airfoil._Decomposer import Decomposer
-from airfoil._airfoil import Airfoil
-from airfoil.util.array_helpers import remove_sequential_duplicates
-from airfoil.util.linestring_helpers import ensure_closed
-from airfoil.util.pyvista_helpers import create_ruled_surface
-
+from ._Decomposer import Decomposer
+from ._airfoil import Airfoil
+from .util import (
+    remove_sequential_duplicates,
+    ensure_closed,
+    create_ruled_surface
+)
 
 import numpy as np
 from numpy.typing import ArrayLike
 
 import pyvista as pv
+import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 
+from pydantic import BaseModel
 
-from dataclasses import dataclass, replace
+class WingSegment(BaseModel):
+    
+    class Config:
+        frozen=True
 
-
-@dataclass
-class WingSegment:
     left:Airfoil
     right:Airfoil
     length:float
 
     def __repr__(self) -> str:
-        return f"<WingSegment length={self.length:.1f} left={self.left} right={self.right} />"
+        return f"<WingSegment length={self.length:.1f} left={repr(self.left)} right={repr(self.right)} />"
 
     def with_translation(self, translation:ArrayLike) -> WingSegment:
-        return replace(
-            self,
-            left  = self.left .with_translation(translation),
-            right = self.right.with_translation(translation),
+        return self.model_copy(
+            update={
+                "left"  : self.left .with_translation(translation),
+                "right" : self.right.with_translation(translation),
+            }
         )
     
     def with_mirror(self) -> WingSegment:
-        return replace(
-            self,
-            left =self.right,
-            right=self.left,
+        return self.model_copy(
+            update={
+                "left"  : self.right,
+                "right" : self.left,
+            }
+        )
+    
+    def with_width(self, length:float) -> WingSegment:
+        return self.model_copy(
+            update={
+                "length":length
+            }
+        )
+    
+    def with_rotation(self, rotation_deg:float) -> WingSegment:
+        return self.model_copy(
+            update={
+                "left"  : self.left.with_rotation(rotation_deg),
+                "right" : self.right.with_rotation(rotation_deg),
+            }
         )
 
     def bounding_size(self):
@@ -96,6 +117,15 @@ class WingSegment:
         )
         return mesh_target
     
+    def plot_2d(self, ax:Axes|None=None):
+        if ax is None:
+            _, ax = plt.subplots()
+        l,r = self.decompose()
+        for line in l+r:
+            ax.plot(*line.transpose(), "o-", ms=2)
+        ax.set_aspect("equal")
+        return ax
+
     @classmethod
     def plot_wing_segments(cls, segments:list[WingSegment], pt:pv.Plotter|None=None, decomposer:Decomposer|None=None):
         if pt is None:
@@ -111,7 +141,7 @@ class WingSegment:
         segments:list[WingSegment],
         decomposer:Decomposer|None=None,
         add_mirrored:bool=False,
-        share_decomposer:bool=True,
+        share_decomposer:bool=False,
         first_segment_is_central:bool=True,
     ):
         if decomposer is None:
