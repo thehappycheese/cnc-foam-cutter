@@ -160,8 +160,8 @@ class GCodeBuilder:
             if current_current is not None:
                 next_current = np.round(current_current*10)/10
                 if next_current != last_current:
-                    result = result.set_current(next_current)
-                    last_current = current_current
+                    result = result.set_current(current_current)
+                    last_current = next_current
             
             if next_feedrate != last_feedrate:
                 result = result.linear_move_with_feedrate(
