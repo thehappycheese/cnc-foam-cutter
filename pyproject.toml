@@ -5,12 +5,12 @@ authors =[{name="thehappycheese@github"}]
 keywords = ["CNC"," Hot Wire", "4 Axis", "Hot Wire Foam Cutting", "Airfoil", "Wing", "Aircraft"]
 
 dependencies = [
-    "pandas~=2.2.0",
-    "scipy~=1.15.0",
-    "matplotlib~=3.10.0",
+    "pandas~=3.0.0",
+    "scipy~=1.17.0",
+    "matplotlib~=3.10.8",
     "shapely~=2.1.0",
-    "pyvista~=0.45.0",
-    "pydantic~=2.11.0"
+    "pyvista~=0.47.0",
+    "pydantic~=2.12.0"
 ]
 requires-python = "~=3.13"
 
